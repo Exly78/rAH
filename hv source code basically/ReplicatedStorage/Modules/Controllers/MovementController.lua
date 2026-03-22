@@ -100,7 +100,22 @@ function MovementController:UpdateSprintAnimation()
 	if self.CC.StateMachine:IsInState("Dodge") then
 		-- Hard interrupt; sprint will be resumed explicitly later
 		self._wasSprintingLastFrame = false
+		-- We mark it as not playing so that when dodge ends, it restarts the animation
+		self._sprintAnimPlaying = false 
 		return
+	end
+
+	-- Detect weapon/equip change to force restart animation
+	local weapon = self.CC.CombatController.CurrentWeapon
+	local isEquipped = self.Character:GetAttribute("IsEquipped")
+	local currentSprintKey = (weapon and isEquipped) and (weapon .. "_Sprint") or "Sprint"
+
+	if self._lastSprintKey ~= currentSprintKey then
+		if self._sprintAnimPlaying then
+			self:StopSprintAnimation()
+			self._wasSprintingLastFrame = false -- Force restart
+		end
+		self._lastSprintKey = currentSprintKey
 	end
 
 	local shouldSprint = self.IsSprinting and self.IsMoving
@@ -115,20 +130,49 @@ function MovementController:UpdateSprintAnimation()
 end
 
 function MovementController:StartSprintAnimation()
-	if self._sprintAnimPlaying then return end
+	print("[SPRINT DEBUG] StartSprintAnimation called")
+	print("[SPRINT DEBUG] _sprintAnimPlaying:", self._sprintAnimPlaying)
+
+	if self._sprintAnimPlaying then 
+		print("[SPRINT DEBUG] Already playing, returning early")
+		return 
+	end
 
 	local weapon = self.CC.CombatController.CurrentWeapon
+	local isEquipped = self.Character:GetAttribute("IsEquipped")
+
+	print("[SPRINT DEBUG] weapon:", weapon, "isEquipped:", isEquipped)
+
 	local sprintKey =
-		(weapon and self.Character:GetAttribute("IsEquipped"))
+		(weapon and isEquipped)
 		and (weapon .. "_Sprint")
 		or "Sprint"
 
+	print("[SPRINT DEBUG] sprintKey:", sprintKey)
+
 	if weapon then
+		print("[SPRINT DEBUG] Stopping weapon idle:", weapon .. "_WeaponIdle")
 		self.CC.AnimationManager:Stop(weapon .. "_WeaponIdle", 0.05)
 	end
 
-	self.CC.AnimationManager:Play(sprintKey, 0.1, false)
-	self._sprintAnimPlaying = true
+	print("[SPRINT DEBUG] Playing animation:", sprintKey)
+	local success = self.CC.AnimationManager:Play(sprintKey, 0.1, false)
+	print("[SPRINT DEBUG] Play result:", success)
+
+	if success then
+		self._sprintAnimPlaying = true
+		print("[SPRINT DEBUG] Sprint animation started successfully!")
+	else
+		warn("[SPRINT DEBUG] Failed to play sprint animation:", sprintKey)
+		-- Check if the animation exists
+		print("[SPRINT DEBUG] Animation might not exist. Check:")
+		if weapon and isEquipped then
+			print("[SPRINT DEBUG] - Assets/Animations/Combat/Weapons/" .. weapon .. "/Sprint")
+		else
+			print("[SPRINT DEBUG] - Assets/Animations/Movement/Sprint")
+		end
+	end
+	end_sprintAnimPlaying = true
 end
 
 function MovementController:StopSprintAnimation()
@@ -158,11 +202,30 @@ function MovementController:ForceStopSprintAnimation()
 end
 
 function MovementController:TryResumeSprint()
-	if self.IsMoving and self.IsSprinting and not self._sprintAnimPlaying then
-		-- Re-arm edge detection
-		self._wasSprintingLastFrame = false
-		self:StartSprintAnimation()
+	-- ✅ FIX: Only resume if player is CURRENTLY moving and sprinting
+	if not self.IsMoving or not self.IsSprinting then
+		print("[MovementController] TryResumeSprint: Not moving or not sprinting, skipping")
+		return
 	end
+
+	-- ✅ FIX: Don't resume if animation is already playing
+	if self._sprintAnimPlaying then
+		print("[MovementController] TryResumeSprint: Already playing, skipping")
+		return
+	end
+
+	print("[MovementController] TryResumeSprint: Resuming sprint animation")
+
+	-- Re-arm edge detection by setting this to false
+	-- This allows UpdateSprintAnimation to properly restart the animation
+	self._wasSprintingLastFrame = false
+
+	-- ✅ FIX: Let the normal UpdateSprintAnimation handle it on next frame
+	-- Don't manually call StartSprintAnimation here to avoid conflicts
+	-- The next frame's UpdateSprintAnimation will see:
+	-- - shouldSprint = true (player is sprinting and moving)
+	-- - _wasSprintingLastFrame = false (we just reset it)
+	-- - This triggers line 126 and calls StartSprintAnimation()
 end
 
 return MovementController
