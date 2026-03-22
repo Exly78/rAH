@@ -1,56 +1,60 @@
---ReplicatedStorage.Modules.StateMachine.States.Idle (UPDATED WITH BLOCK)
-
 local State = require(script.Parent.Parent.State)
 
-local IdleState = setmetatable({}, State)
-IdleState.__index = IdleState
+local KnockedOutState = setmetatable({}, State)
+KnockedOutState.__index = KnockedOutState
 
-function IdleState.new()
-	local self = State.new("Idle", 0)
-	return setmetatable(self, IdleState)
+function KnockedOutState.new()
+	local self = State.new("KnockedOut", 15)  
+	self.Duration = 0
+	self.ElapsedTime = 0
+	return setmetatable(self, KnockedOutState)
 end
 
-function IdleState:OnEnter()
-	local owner = self:GetOwner() 
-	local combat = owner.CombatController
-
-	if owner.Character:GetAttribute("IsEquipped") and combat.CurrentWeapon then
-		local idleAnim = combat.CurrentWeapon .. "_WeaponIdle"
-		owner.AnimationManager:Play(idleAnim, 0.2)
-	end
-end
-
-function IdleState:Update(dt)
+function KnockedOutState:OnEnter(payload)
 	local owner = self:GetOwner()
+	local character = owner.Character
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
 
-	-- Check for dodge input
-	if owner.WantsDodge then
-		local isVulnerable = not owner.IsInvulnerableFlag 
+	if not rootPart then return end
 
-		if isVulnerable then
-			owner.StateMachine:SetState("Dodge")
-		end
+	payload = payload or {}
+	self.Duration = payload.duration or 2  
+	self.ElapsedTime = 0
+
+	-- Stop movement by zeroing velocity and locking speed
+	rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+	owner.Humanoid.WalkSpeed = 0
+
+	-- Stop sprint if active
+	if owner.MovementController and owner.MovementController._sprintAnimPlaying then
+		owner.MovementController:ForceStopSprintAnimation()
 	end
-	-- NEW: Check for slide/crouch
-	if owner.WantsSlide or owner:WantsToSlide() then
-		owner.StateMachine:SetState("Slide", {
-			holding = owner.IsHoldingCrouch
-		})
-		return
-	end
-	-- NEW: Check for block input
-	if owner.WantsBlock or owner:WantsToBlock() then
-		owner.StateMachine:SetState("Block", {
-			holding = owner.IsHoldingBlock
-		})
+
+	-- Reset combo
+	owner.CombatController:ResetCombo()
+
+	--owner:PlayAnimation("KnockedOut")
+
+	owner:SetInvulnerable(false)
+end
+
+function KnockedOutState:Update(dt)
+	self.ElapsedTime = self.ElapsedTime + dt
+
+	if self.ElapsedTime >= self.Duration then
+		self:GetOwner().StateMachine:SetState("Idle")
 	end
 end
 
-function IdleState:OnExit()
+function KnockedOutState:OnExit()
+	local owner = self:GetOwner()
+	-- Restore walk speed
+	local isEquipped = owner.Character:GetAttribute("IsEquipped")
+	owner.Humanoid.WalkSpeed = isEquipped and 14 or 16
 end
 
-function IdleState:CanTransitionTo(nextStateName)
-	return true
+function KnockedOutState:CanTransitionTo(nextStateName)
+	return nextStateName == "Idle" or nextStateName == "Death"
 end
 
-return IdleState
+return KnockedOutState
