@@ -14,14 +14,22 @@ local WEAPON_ANIMATION_PATHS = {
 	Attack4 = {"Attacking/swing4"},
 	Attack5 = {"Attacking/swing5"},
 	Block = {"Blocking/blocking"},
+	ParryStart = {"Blocking/parrystart"},
+	Parry1 = {"Blocking/trueparry1"},
+	Parry2 = {"Blocking/trueparry2"},
+	Parried = {"Blocking/parried"},
 	Sprint = {"Sprint"},
 	WeaponIdle = {"weaponidle"},
 	Walk = {"Walk"},
-	Critical = {"Attacking/swing5"},
+	Critical    = {"Attacking/critical"},
+	CriticalAlt = {"Attacking/criticalalt"},
+	SlideAttack = {"Attacking/SlideAttack"},
+
 }
 
 local UNIVERSAL_ANIMATIONS = {
 	Sprint = "Movement/Sprint",
+	Spin = "Movement/Dash/Spin",
 	DashForward = "Movement/Dash/DashForward",
 	DashBackward = "Movement/Dash/DashBackward",
 	DashForwardLeft = "Movement/Dash/DashForwardLeft",
@@ -31,6 +39,9 @@ local UNIVERSAL_ANIMATIONS = {
 	DashLeft = "Movement/Dash/DashLeft",
 	DashRight = "Movement/Dash/DashRight",
 	AirDash = "Movement/Dash/AirDash",
+	Slide = "Movement/Slide",
+	Crouch = "Movement/Crouch",
+
 }
 
 local BASE_ANIMATIONS = {
@@ -214,7 +225,10 @@ function AnimationManager:Play(animKey, fadeTime, isAttack)
 	end
 
 	if #animsToPlay == 0 then return false end
-	return self:_playTracks(animsToPlay, fadeTime, false, isAttack)
+
+	local isBase = (action and action == "WeaponIdle") or false
+
+	return self:_playTracks(animsToPlay, fadeTime, isBase, isAttack)
 end
 
 function AnimationManager:UpdateAnimate(animKey, animateScript, animateSlot)
@@ -308,6 +322,10 @@ function AnimationManager:Stop(animKey, fadeTime)
 		if track and track.Animation and track.Animation.AnimationId == targetAnimId then
 			track:Stop(fadeTime)
 			table.remove(self.CurrentTracks, i)
+			-- If we just stopped the base track, clear the reference
+			if track == self._baseTrack then
+				self._baseTrack = nil
+			end
 			return true
 		end
 	end
@@ -431,6 +449,51 @@ function AnimationManager:IsPlaying()
 	for _, track in ipairs(self.CurrentTracks) do
 		if track and track.IsPlaying then return true end
 	end
+	return false
+end
+
+-- Check if a specific animation key is currently playing
+function AnimationManager:IsKeyPlaying(animKey)
+	if self._isDestroyed then return false end
+
+	-- Resolve the animKey to animation object(s), same logic as Play()
+	local targetIds = {}
+
+	local weaponName, action = string.match(animKey, "^(%w+)_(.+)$")
+	if not weaponName then
+		local animPath = BASE_ANIMATIONS[animKey] or UNIVERSAL_ANIMATIONS[animKey]
+		if animPath then
+			local anim = self:_findAnimation(AnimationsFolder, animPath)
+			if anim then targetIds[anim.AnimationId] = true end
+		end
+	else
+		local animPaths = WEAPON_ANIMATION_PATHS[action]
+		if animPaths then
+			local weaponFolder =
+				AnimationsFolder:FindFirstChild("Combat")
+				and AnimationsFolder.Combat:FindFirstChild("Weapons")
+				and AnimationsFolder.Combat.Weapons:FindFirstChild(weaponName)
+
+			if weaponFolder then
+				for _, path in ipairs(animPaths) do
+					local anim = self:_findAnimation(weaponFolder, path)
+					if anim then targetIds[anim.AnimationId] = true end
+				end
+			end
+		end
+	end
+
+	if not next(targetIds) then return false end
+
+	-- Check if any matching track is currently playing
+	for _, track in ipairs(self.CurrentTracks) do
+		if track and track.IsPlaying and track.Animation then
+			if targetIds[track.Animation.AnimationId] then
+				return true
+			end
+		end
+	end
+
 	return false
 end
 
