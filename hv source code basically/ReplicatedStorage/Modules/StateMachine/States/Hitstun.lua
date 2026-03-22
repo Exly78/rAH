@@ -18,7 +18,7 @@ function HitstunState:OnEnter(payload)
 	self.ElapsedTime = 0
 
 	--owner:PlayAnimation("Hitstun")
-	owner:SetVulnerable(true) 
+	owner:SetInvulnerable(false)
 end
 
 function HitstunState:Update(dt)
