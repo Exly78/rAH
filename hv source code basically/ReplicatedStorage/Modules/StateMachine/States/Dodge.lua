@@ -1,10 +1,17 @@
 local State = require(script.Parent.Parent.State)
+local TagManager = require(script.Parent.Parent.Parent.Managers.TagManager)
+local CombatRemotes = require(game.ReplicatedStorage.Modules.Remotes.CombatRemotes)
+
 local RunService = game:GetService("RunService")
 local UIS = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 
 local DodgeState = setmetatable({}, State)
 DodgeState.__index = DodgeState
+
+-- Dodge success config
+local SPEED_BOOST_AMOUNT = 8
+local SPEED_BOOST_DURATION = 0.75
 
 function DodgeState.new()
 	local self = State.new("Dodge", 8)
@@ -13,7 +20,9 @@ function DodgeState.new()
 	self.DodgeMotion = nil
 	self.AnimationTrack = nil
 	self.DodgeDirection = nil
-	self.CameraInfluence = 0.6  -- 60% camera influence, 40% character orientation
+	self.CameraInfluence = 0.6
+	self.WasSprinting = false
+	self.DodgeSucceeded = false
 	return setmetatable(self, DodgeState)
 end
 
@@ -21,6 +30,9 @@ function DodgeState:OnEnter(payload)
 	local owner = self:GetOwner()
 	payload = payload or {}
 	self.Timer = 0
+	self.DodgeSucceeded = false
+
+	self.WasSprinting = owner.MovementController and owner.MovementController.IsSprinting or false
 
 	if owner.MovementController and owner.MovementController._sprintAnimPlaying then
 		owner.MovementController:ForceStopSprintAnimation()
@@ -56,7 +68,11 @@ function DodgeState:OnEnter(payload)
 	humanoid.AutoRotate = false
 
 	owner:SetInvulnerable(true)
-	owner.Character:SetAttribute("DodgeFrames", true)
+
+	TagManager.AddTag(owner.Character, "Invulnerable", self.DodgeDuration)
+	TagManager.AddTag(owner.Character, "Dodging", self.DodgeDuration)
+
+	CombatRemotes.DodgeStarted:FireServer(self.DodgeDuration)
 
 	self.DodgeMotion = self:StartDodgeMotion(owner, self.DodgeDirection)
 end
@@ -101,13 +117,11 @@ function DodgeState:StartDodgeMotion(owner, direction)
 	if isAirDash then
 		dashDir = cam.CFrame.LookVector
 	else
-		-- Get camera direction (flattened to horizontal)
 		local camLook = cam.CFrame.LookVector
 		local camRight = cam.CFrame.RightVector
 		local camForward = Vector3.new(camLook.X, 0, camLook.Z).Unit
 		local camRightFlat = Vector3.new(camRight.X, 0, camRight.Z).Unit
 
-		-- Map input direction to camera-relative direction
 		local inputDir
 		if direction == "Forward" then inputDir = camForward
 		elseif direction == "Backward" then inputDir = -camForward
@@ -119,7 +133,6 @@ function DodgeState:StartDodgeMotion(owner, direction)
 		elseif direction == "BackwardRight" then inputDir = (-camForward + camRightFlat).Unit
 		else inputDir = camForward end
 
-		-- Blend with character facing for partial camera influence
 		local charForward = rootPart.CFrame.LookVector
 		local charRight = rootPart.CFrame.RightVector
 
@@ -134,7 +147,6 @@ function DodgeState:StartDodgeMotion(owner, direction)
 		elseif direction == "BackwardRight" then charRelativeDir = (-charForward + charRight).Unit
 		else charRelativeDir = charForward end
 
-		-- Blend: more camera influence
 		dashDir = (inputDir * self.CameraInfluence + charRelativeDir * (1 - self.CameraInfluence)).Unit
 	end
 
@@ -186,9 +198,61 @@ end
 
 function DodgeState:Update(dt)
 	self.Timer += dt
-	if self.Timer >= self.DodgeDuration then
+	if self.Timer >= self.DodgeDuration and not self.DodgeSucceeded then
 		self:ExitDodge()
 	end
+end
+
+-- ===== PERFECT DODGE =====
+-- Called by CombatController when server confirms an attack was dodged.
+-- Cancels the roll early, plays spin anim, gives speed boost.
+function DodgeState:OnDodgeSuccess()
+	if self.DodgeSucceeded then return end  -- Only trigger once per dodge
+	self.DodgeSucceeded = true
+
+	local owner = self:GetOwner()
+	print("[DodgeState] PERFECT DODGE!")
+
+	-- Kill the dash motion immediately
+	if self.DodgeMotion then
+		self.DodgeMotion:Disconnect()
+		self.DodgeMotion = nil
+	end
+
+	-- Stop residual velocity
+	local current = owner.RootPart.AssemblyLinearVelocity
+	owner.RootPart.AssemblyLinearVelocity = Vector3.new(0, current.Y, 0)
+
+	-- Cancel dash animation, play spin
+	owner.AnimationManager:StopAll(0.05, false)
+	owner.AnimationManager:Play("Spin", 0.05)
+
+	-- Restore movement immediately
+	owner:SetInvulnerable(false)
+	owner.Character:SetAttribute("DodgeFrames", false)
+	owner.Humanoid.AutoRotate = true
+	owner.Humanoid.JumpHeight = 7.2
+
+	-- Speed boost
+	local isEquipped = owner.Character:GetAttribute("IsEquipped")
+	local baseSpeed = isEquipped and 14 or 16
+	owner.Humanoid.WalkSpeed = baseSpeed + SPEED_BOOST_AMOUNT
+
+	-- Remove speed boost after duration
+	task.delay(SPEED_BOOST_DURATION, function()
+		if owner and owner.Humanoid then
+			local equippedNow = owner.Character:GetAttribute("IsEquipped")
+			local currentBase = equippedNow and 14 or 16
+			-- Only reset if we haven't entered another state that changed speed
+			if owner.Humanoid.WalkSpeed == currentBase + SPEED_BOOST_AMOUNT then
+				local sprinting = owner.MovementController and owner.MovementController.IsSprinting
+				owner.Humanoid.WalkSpeed = sprinting and 26 or currentBase
+			end
+		end
+	end)
+
+	-- Exit to Idle
+	owner.StateMachine:SetState("Idle")
 end
 
 function DodgeState:ExitDodge()
