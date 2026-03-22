@@ -1,3 +1,5 @@
+--ServerStorage.Modules.Remotes.CombatRemotes
+
 local CombatRemotes = {}
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local remotes = ReplicatedStorage:FindFirstChild("Remotes") or Instance.new("Folder")
@@ -14,6 +16,7 @@ local function GetOrCreateRemote(name, className)
 	return remote
 end
 
+-- Combat
 CombatRemotes.SkillRequest = GetOrCreateRemote("SkillRequest", "RemoteEvent")
 CombatRemotes.CreateHitbox = GetOrCreateRemote("CreateHitbox", "RemoteEvent") 
 CombatRemotes.HitConfirm = GetOrCreateRemote("HitConfirm", "RemoteEvent")
@@ -22,7 +25,28 @@ CombatRemotes.ApplyKnockedOut = GetOrCreateRemote("ApplyKnockedOut", "RemoteEven
 CombatRemotes.UpdateHealth = GetOrCreateRemote("UpdateHealth", "RemoteEvent")
 CombatRemotes.ReplicateState = GetOrCreateRemote("ReplicateState", "RemoteEvent")
 CombatRemotes.ValidateHit = GetOrCreateRemote("ValidateHit", "RemoteFunction")
+CombatRemotes.UpdateStatusEffects = GetOrCreateRemote("UpdateStatusEffects", "RemoteEvent")
+
+-- Weapon equip/unequip state
 CombatRemotes.WeaponEquipped = GetOrCreateRemote("WeaponEquipped", "RemoteEvent")
 CombatRemotes.WeaponUnequipped = GetOrCreateRemote("WeaponUnequipped", "RemoteEvent")
+
+-- Weapon model management (client -> server)
+CombatRemotes.AddWeapon = GetOrCreateRemote("AddWeapon", "RemoteEvent")
+CombatRemotes.RemoveWeapon = GetOrCreateRemote("RemoveWeapon", "RemoteEvent")
+CombatRemotes.WeaponWeldToHand = GetOrCreateRemote("WeaponWeldToHand", "RemoteEvent")
+CombatRemotes.WeaponWeldToBody = GetOrCreateRemote("WeaponWeldToBody", "RemoteEvent")
+
+-- Defense state (client -> server)
+CombatRemotes.DodgeStarted = GetOrCreateRemote("DodgeStarted", "RemoteEvent")
+CombatRemotes.BlockStarted = GetOrCreateRemote("BlockStarted", "RemoteEvent")
+CombatRemotes.BlockEnded = GetOrCreateRemote("BlockEnded", "RemoteEvent")
+
+-- Combat feedback (server -> client)
+CombatRemotes.DodgeSuccess = GetOrCreateRemote("DodgeSuccess", "RemoteEvent")
+CombatRemotes.ParrySuccess = GetOrCreateRemote("ParrySuccess", "RemoteEvent")
+CombatRemotes.BlockImpact = GetOrCreateRemote("BlockImpact", "RemoteEvent")
+CombatRemotes.GotParried = GetOrCreateRemote("GotParried", "RemoteEvent")
+
 
 return CombatRemotes
