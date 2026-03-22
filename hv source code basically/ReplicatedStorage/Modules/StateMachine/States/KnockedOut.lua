@@ -21,15 +21,21 @@ function KnockedOutState:OnEnter(payload)
 	self.Duration = payload.duration or 2  
 	self.ElapsedTime = 0
 
-	owner:StopMovement()
-	owner:StopAttacking()
-	rootPart.Velocity = Vector3.new(0, 0, 0) 
+	-- Stop movement by zeroing velocity and locking speed
+	rootPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+	owner.Humanoid.WalkSpeed = 0
+
+	-- Stop sprint if active
+	if owner.MovementController and owner.MovementController._sprintAnimPlaying then
+		owner.MovementController:ForceStopSprintAnimation()
+	end
+
+	-- Reset combo
+	owner.CombatController:ResetCombo()
 
 	--owner:PlayAnimation("KnockedOut")
 
-	owner:SetVulnerable(true)
-
-	owner:DisableInput()
+	owner:SetInvulnerable(false)
 end
 
 function KnockedOutState:Update(dt)
@@ -37,13 +43,14 @@ function KnockedOutState:Update(dt)
 
 	if self.ElapsedTime >= self.Duration then
 		self:GetOwner().StateMachine:SetState("Idle")
-		self:GetOwner():EnableInput()
 	end
 end
 
 function KnockedOutState:OnExit()
 	local owner = self:GetOwner()
-	owner:EnableInput()
+	-- Restore walk speed
+	local isEquipped = owner.Character:GetAttribute("IsEquipped")
+	owner.Humanoid.WalkSpeed = isEquipped and 14 or 16
 end
 
 function KnockedOutState:CanTransitionTo(nextStateName)
