@@ -26,6 +26,7 @@ function HitboxManager:_scan(attacker, cframe, size, hitMap)
 		if humanoid and not hitMap[model] then
 			hitMap[model] = true
 			table.insert(results, model)
+			
 		end
 	end
 
@@ -63,7 +64,7 @@ function HitboxManager:CreateContinuous(attacker, config)
 			local boxCF = root.CFrame * CFrame.new(0, 0, -config.ForwardOffset)
 
 			local hits = self:_scan(attacker, boxCF, config.Size, hitMap)
-
+			print(hits)
 			for _, target in ipairs(hits) do
 				if config.OnHit then
 					config.OnHit(target)
