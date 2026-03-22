@@ -1,3 +1,6 @@
+--ReplicatedStorage.Modules.StateMachine.States.Attack
+-- FIXED: Client no longer detects hits (prevents exploits)
+
 local State = require(script.Parent.Parent.State)
 local HitboxManager = require(game.ReplicatedStorage.Modules.Managers.HitboxManager)
 local CombatRemotes = require(game.ReplicatedStorage.Modules.Remotes.CombatRemotes)
@@ -42,12 +45,17 @@ function AttackState:OnEnter(payload)
 		self.AttackType = payload.attackType
 		self.ComboIndex = payload.comboIndex or 1
 		self.EndlagDuration = payload.endlag or 0.2
-		self.SkillName = nil
+		-- For crits, skillName is passed explicitly. For basic attacks it stays nil
+		-- and CreateHitbox falls back to "BasicAttack".
+		self.SkillName = payload.skillName or nil
 
-		local track = owner.AnimationManager:GetCurrentTrack()
+		local track = payload.track or owner.AnimationManager:GetCurrentTrack()
 		if track then
-			self.KeyframeConnection = track.KeyframeReached:Connect(function(key)
-				if key == "Hit" and not self.HitboxCreated then
+			local animName = track.Animation and track.Animation.Name or "Unknown"
+			print("[AttackState] Firing attack! Track length:", track.Length, "| Animation Name:", animName)
+			self.KeyframeConnection = track:GetMarkerReachedSignal("Hit"):Connect(function()
+				print("[AttackState] Hit marker reached on", animName)
+				if not self.HitboxCreated then
 					self.HitboxCreated = true
 					self:CreateHitbox(owner, self.ComboIndex)
 
@@ -55,6 +63,15 @@ function AttackState:OnEnter(payload)
 						self.KeyframeConnection:Disconnect()
 						self.KeyframeConnection = nil
 					end
+				end
+			end)
+
+			-- fallback if marker doesn't exist
+			task.delay(track.Length * 0.9, function()
+				if not self.HitboxCreated and not self.IsFinished then
+					print("[AttackState] Fallback hitbox creation (no Hit marker found)")
+					self.HitboxCreated = true
+					self:CreateHitbox(owner, self.ComboIndex)
 				end
 			end)
 
@@ -93,32 +110,35 @@ function AttackState:OnEnter(payload)
 	end
 end
 
+-- ===== FIXED FUNCTION =====
 function AttackState:CreateHitbox(owner, comboIndex)
 	local skillName = self.SkillName or "BasicAttack"
+
+	-- CLIENT ONLY NOTIFIES SERVER - DOES NOT DETECT HITS
+	-- Server will handle all hit detection to prevent exploits
+	CombatRemotes.CreateHitbox:FireServer(skillName, comboIndex)
+
+	-- Optional: Create visual-only hitbox for client prediction/feedback
+	-- This doesn't affect actual damage, just shows the player where they're swinging
+	-- Uncomment if you want visual feedback:
+	--[[
 	local skill = SkillData:GetSkill(skillName)
-	if not skill then
-		warn("[AttackState] Skill data missing for", skillName)
-		return
-	end
-
-	local char = owner.Character
-
-	if skill.Continuous then
-		self.HitboxManager:CreateContinuous(char, {
-			Duration = skill.Duration,
-			Interval = skill.Interval or 0.07,
-			Size = skill.HitboxSize,
-			ForwardOffset = skill.HitboxOffset,
-			OnHit = function(target)
-				CombatRemotes.CreateHitbox:FireServer(skillName, comboIndex)
-			end
-		})
-	else
-		local hits = self.HitboxManager:CreateSingle(char, owner.RootPart.CFrame, skill.HitboxSize)
-		for _, target in ipairs(hits) do
-			CombatRemotes.CreateHitbox:FireServer(skillName, comboIndex)
+	if skill then
+		-- Visual hitbox only (no OnHit callback)
+		if skill.Continuous then
+			self.HitboxManager:CreateContinuous(owner.Character, {
+				Duration = skill.Duration,
+				Interval = skill.Interval or 0.07,
+				Size = skill.HitboxSize,
+				ForwardOffset = skill.HitboxOffset,
+				OnHit = nil  -- No callback = visual only
+			})
+		else
+			-- Just create visual representation, ignore hits
+			self.HitboxManager:CreateSingle(owner.Character, owner.RootPart.CFrame, skill.HitboxSize)
 		end
 	end
+	]]--
 end
 
 function AttackState:Update(dt)
