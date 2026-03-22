@@ -1,0 +1,227 @@
+-- ReplicatedStorage.Modules.Data.StatData
+-- Defines the 6 core stats, their effects, and scaling formulas.
+-- All systems read from here to calculate derived values.
+
+local StatData = {}
+
+-- ===== STAT DEFINITIONS =====
+StatData.Stats = {
+
+	Strength = {
+		DisplayName  = "Strength",
+		Abbreviation = "STR",
+		Description  = "Increases weapon damage and physical power. Required for heavy weapons.",
+		Color        = Color3.fromRGB(220, 80, 60),
+		Icon         = "⚔️",
+
+		-- Weapons that scale with this stat
+		WeaponScaling = { "Greatsword", "Scythe", "Fist" },
+
+		-- Derived effects per point invested
+		Effects = {
+			BaseDamageBonus     = 0.8,   -- flat damage added per point
+			HeavyWeaponDamage   = 0.012, -- % bonus per point for heavy weapons
+		},
+
+		-- Minimum points required to equip weapon tiers
+		WeaponRequirements = {
+			Light  = 0,
+			Medium = 5,
+			Heavy  = 20,
+		},
+	},
+
+	Agility = {
+		DisplayName  = "Agility",
+		Abbreviation = "AGI",
+		Description  = "Increases light weapon damage, mobility, dodge speed, and critical hit chance.",
+		Color        = Color3.fromRGB(100, 200, 120),
+		Icon         = "🌿",
+
+		WeaponScaling = { "Dagger", "Katana" },
+
+		Effects = {
+			LightWeaponDamage  = 0.015, -- % bonus per point
+			DodgeSpeedBonus    = 0.004, -- % speed added per point
+			CritChanceBonus    = 0.003, -- % crit chance per point
+		},
+
+		WeaponRequirements = {
+			Light  = 0,
+			Medium = 8,
+			Heavy  = 30,
+		},
+	},
+
+	Endurance = {
+		DisplayName  = "Endurance",
+		Abbreviation = "END",
+		Description  = "Increases max health, stamina, and resistances. Required for heavy armor.",
+		Color        = Color3.fromRGB(80, 140, 220),
+		Icon         = "🛡️",
+
+		WeaponScaling = {},  -- Endurance doesn't scale weapons directly
+
+		Effects = {
+			MaxHealthBonus    = 5,    -- flat HP per point
+			PostureBonus      = 2,    -- flat posture per point
+			DamageResistance  = 0.004, -- % damage reduction per point (soft cap at 40%)
+		},
+
+		WeaponRequirements = {
+			Light  = 0,
+			Medium = 0,
+			Heavy  = 15,
+		},
+	},
+
+	Dexterity = {
+		DisplayName  = "Dexterity",
+		Abbreviation = "DEX",
+		Description  = "Increases accuracy and ranged weapon handling. Required for hybrid and ranged weapons.",
+		Color        = Color3.fromRGB(200, 160, 60),
+		Icon         = "🏹",
+
+		WeaponScaling = { "Sueno" },
+
+		Effects = {
+			RangedDamageBonus  = 0.014,
+			AccuracyBonus      = 0.01,
+			HybridWeaponDamage = 0.01,
+		},
+
+		WeaponRequirements = {
+			Light   = 0,
+			Medium  = 5,
+			Heavy   = 25,
+			Hybrid  = 15,
+			Ranged  = 10,
+		},
+	},
+
+	Intelligence = {
+		DisplayName  = "Intelligence",
+		Abbreviation = "INT",
+		Description  = "Increases Veil magic damage and mana efficiency. Required for Veil abilities.",
+		Color        = Color3.fromRGB(160, 80, 220),
+		Icon         = "🔮",
+
+		WeaponScaling = {},
+
+		Effects = {
+			VeilDamageBonus  = 0.02,   -- % per point
+			ManaEfficiency   = 0.008,  -- % cost reduction per point
+			SpellDuration    = 0.005,  -- % per point
+		},
+
+		WeaponRequirements = {
+			Light  = 0,
+			Medium = 0,
+			Heavy  = 0,
+		},
+	},
+
+	Faith = {
+		DisplayName  = "Faith",
+		Abbreviation = "FAI",
+		Description  = "Grants access to holy and cursed powers. Affects Veil manipulation and sanity stability.",
+		Color        = Color3.fromRGB(240, 210, 80),
+		Icon         = "✨",
+
+		WeaponScaling = {},
+
+		Effects = {
+			HolyDamageBonus    = 0.018,
+			SanityResistance   = 0.006, -- % per point (slower sanity drain)
+			BuffDuration       = 0.007,
+		},
+
+		WeaponRequirements = {
+			Light  = 0,
+			Medium = 0,
+			Heavy  = 0,
+		},
+	},
+}
+
+-- ===== POINT SYSTEM =====
+StatData.Points = {
+	StartingPoints    = 0,
+	PointCap          = 200,
+
+	-- Perk milestone: every N total points spent, a perk pick is offered
+	PerkMilestoneEvery = 25,
+
+	-- How many perks are presented at each milestone to choose from
+	PerksOfferedCount  = 5,
+}
+
+-- ===== HELPER FUNCTIONS =====
+
+-- Returns the stat definition table
+function StatData:GetStat(statName)
+	return self.Stats[statName]
+end
+
+-- Returns all stat names as an ordered list
+function StatData:GetAllStatNames()
+	return { "Strength", "Agility", "Endurance", "Dexterity", "Intelligence", "Faith" }
+end
+
+-- Calculates derived combat values from a stats table
+-- stats = { Strength = N, Agility = N, ... }
+function StatData:CalculateDerived(stats)
+	local derived = {
+		BonusDamage       = 0,
+		MaxHealthBonus    = 0,
+		PostureBonus      = 0,
+		DamageResistance  = 0,
+		DodgeSpeedBonus   = 0,
+		CritChance        = 0,
+		VeilDamageBonus   = 0,
+		SanityResistance  = 0,
+	}
+
+	local str = stats.Strength   or 0
+	local agi = stats.Agility    or 0
+	local endur = stats.Endurance  or 0
+	local dex = stats.Dexterity  or 0
+	local int = stats.Intelligence or 0
+	local fai = stats.Faith      or 0
+
+	derived.BonusDamage      = str * self.Stats.Strength.Effects.BaseDamageBonus
+	derived.MaxHealthBonus   = endur * self.Stats.Endurance.Effects.MaxHealthBonus
+	derived.PostureBonus     = endur * self.Stats.Endurance.Effects.PostureBonus
+	derived.DamageResistance = math.min(0.4, endur * self.Stats.Endurance.Effects.DamageResistance)
+	derived.DodgeSpeedBonus  = agi * self.Stats.Agility.Effects.DodgeSpeedBonus
+	derived.CritChance       = agi * self.Stats.Agility.Effects.CritChanceBonus
+	derived.VeilDamageBonus  = int * self.Stats.Intelligence.Effects.VeilDamageBonus
+	derived.SanityResistance = fai * self.Stats.Faith.Effects.SanityResistance
+
+	return derived
+end
+
+-- Checks whether a player's stats meet a weapon's requirements
+-- stats = { Strength = N, ... }, weaponType = "Light"/"Medium"/"Heavy"/"Hybrid"/"Ranged"
+function StatData:CanEquipWeaponType(stats, weaponType)
+	for statName, statDef in pairs(self.Stats) do
+		local req = statDef.WeaponRequirements[weaponType]
+		if req and req > 0 then
+			if (stats[statName] or 0) < req then
+				return false, statName, req
+			end
+		end
+	end
+	return true
+end
+
+-- Returns the total points spent from a stats table
+function StatData:TotalPointsSpent(stats)
+	local total = 0
+	for _, statName in ipairs(self:GetAllStatNames()) do
+		total = total + (stats[statName] or 0)
+	end
+	return total
+end
+
+return StatData
