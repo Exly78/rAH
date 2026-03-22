@@ -12,6 +12,8 @@ local IdleState = require(script.Parent.Parent.StateMachine.States.Idle)
 local AttackState = require(script.Parent.Parent.StateMachine.States.Attack)
 local HitstunState = require(script.Parent.Parent.StateMachine.States.Hitstun)
 local DodgeState = require(script.Parent.Parent.StateMachine.States.Dodge)
+local BlockState = require(script.Parent.Parent.StateMachine.States.Block)  -- NEW
+local SlideState = require(script.Parent.Parent.StateMachine.States.Slide)
 local KnockedOutState = require(script.Parent.Parent.StateMachine.States.KnockedOut)
 
 local AnimationManager = require(game.ReplicatedStorage.Modules.Managers.AnimationManager)
@@ -26,7 +28,11 @@ function CharacterController.new(character, playerData)
 	self.Humanoid = character:WaitForChild("Humanoid")
 	self.RootPart = character:WaitForChild("HumanoidRootPart")
 
-	self.WantsDodge = false 
+	self.WantsDodge = false
+	self.WantsBlock = false  -- NEW
+	self.IsHoldingBlock = false  -- NEW
+	self.WantsSlide = false
+	self.IsHoldingCrouch = false
 	self.IsInvulnerableFlag = false
 
 	TagManager.Initialize(self.Character)
@@ -42,7 +48,9 @@ function CharacterController.new(character, playerData)
 	self.StateMachine:RegisterState(AttackState.new())
 	self.StateMachine:RegisterState(HitstunState.new())
 	self.StateMachine:RegisterState(DodgeState.new())
+	self.StateMachine:RegisterState(BlockState.new())  -- NEW
 	self.StateMachine:RegisterState(KnockedOutState.new())
+	self.StateMachine:RegisterState(SlideState.new())
 	self.StateMachine:Start()
 
 	local defaultWeapon = (playerData and playerData.EquippedWeapon) or "Katana"
@@ -70,14 +78,25 @@ function CharacterController:WantsToDodge()
 	return self.WantsDodge
 end
 
+function CharacterController:WantsToBlock()  -- NEW
+	return self.WantsBlock
+end
+function CharacterController:WantsToSlide()
+	return self.WantsSlide
+end
+
+-- FIXED: Using TagManager.HasTag instead of checking state internals
 function CharacterController:IsInvulnerable()
-	return self.IsInvulnerableFlag or self.StateMachine:IsInState("Dodge")
+	return self.IsInvulnerableFlag 
+		or self.StateMachine:IsInState("Dodge")
+		or TagManager.HasTag(self.Character, "CanParry")  -- USING TAGS
 end
 
 function CharacterController:IsVulnerable()
 	return not self.StateMachine:IsInState("Dodge")
 		and not self.StateMachine:IsInState("Hitstun")
 		and not self.IsInvulnerableFlag
+		and not TagManager.HasTag(self.Character, "CanParry")  -- USING TAGS
 end
 
 function CharacterController:SetInvulnerable(state)
@@ -120,6 +139,8 @@ end
 function CharacterController:PlayIdle()
 	if self.Character:GetAttribute("IsEquipped") and self.CombatController.CurrentWeapon then
 		local idleKey = self.CombatController.CurrentWeapon .. "_WeaponIdle"
+		-- Don't restart if already playing
+		if self.AnimationManager:IsKeyPlaying(idleKey) then return end
 		self.AnimationManager:Play(idleKey, 0.2, false)
 	end
 end
