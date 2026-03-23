@@ -4,7 +4,7 @@ local ServerCombatManager = {}
 ServerCombatManager.__index = ServerCombatManager
 
 local Players      = game:GetService("Players")
-local CombatRemotes = require(game.ServerStorage.Modules.Remotes.CombatRemotes)
+local CombatRemotes = require(game.ReplicatedStorage.Modules.Remotes.CombatRemotes)
 local SkillData    = require(game.ReplicatedStorage.Modules.Data.SkillData)
 local WeaponData   = require(game.ReplicatedStorage.Modules.Data.WeaponData)
 local TagManager   = require(game.ReplicatedStorage.Modules.Managers.TagManager)

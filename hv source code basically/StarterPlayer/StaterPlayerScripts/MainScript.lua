@@ -9,12 +9,10 @@ if not player then return end
 
 local character = player.Character or player.CharacterAdded:Wait()
 
-local Modules           = game.ReplicatedStorage:WaitForChild("Modules")
+local Modules             = game.ReplicatedStorage:WaitForChild("Modules")
 local CharacterController = require(Modules.Controllers:WaitForChild("CharacterController"))
-local Store             = require(Modules.Controllers:WaitForChild("ControllerStore"))
 
 local controller = CharacterController.new(character, {})
-Store.Controller = controller
 
 local humanoid = controller.Humanoid
 humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)

@@ -7,7 +7,7 @@ local ServerHealthManager = {}
 ServerHealthManager.__index = ServerHealthManager
 
 local Players = game:GetService("Players")
-local CombatRemotes = require(game.ServerStorage.Modules.Remotes.CombatRemotes)
+local CombatRemotes = require(game.ReplicatedStorage.Modules.Remotes.CombatRemotes)
 
 -- ===== CONSTRUCTOR =====
 function ServerHealthManager.new()
