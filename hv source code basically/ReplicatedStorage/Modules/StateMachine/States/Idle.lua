@@ -1,4 +1,4 @@
---ReplicatedStorage.Modules.StateMachine.States.Idle (UPDATED WITH BLOCK)
+--ReplicatedStorage.Modules.StateMachine.States.Idle
 
 local State = require(script.Parent.Parent.State)
 
@@ -25,21 +25,20 @@ function IdleState:Update(dt)
 
 	-- Check for dodge input
 	if owner.WantsDodge then
-		local isVulnerable = not owner.IsInvulnerableFlag 
-
-		if isVulnerable then
+		owner.WantsDodge = false
+		if not owner.IsInvulnerableFlag then
 			owner.StateMachine:SetState("Dodge")
 		end
 	end
-	-- NEW: Check for slide/crouch
 	if owner.WantsSlide or owner:WantsToSlide() then
+		owner.WantsSlide = false
 		owner.StateMachine:SetState("Slide", {
 			holding = owner.IsHoldingCrouch
 		})
 		return
 	end
-	-- NEW: Check for block input
 	if owner.WantsBlock or owner:WantsToBlock() then
+		owner.WantsBlock = false
 		owner.StateMachine:SetState("Block", {
 			holding = owner.IsHoldingBlock
 		})

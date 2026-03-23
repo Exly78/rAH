@@ -26,6 +26,7 @@ function CombatController.new(characterController)
 	self.ComboResetTimer     = 0
 	self.QueuedAttack        = false
 	self.CanQueueNextAttack  = false
+	self._isEquipping        = false
 
 	self.Character:SetAttribute("IsEquipped", false)
 	self.Character:SetAttribute("WeaponDamageMultiplier", DAMAGE_MULTIPLIERS.UNARMED)
@@ -48,7 +49,8 @@ end
 -- ===== EQUIP / UNEQUIP =====
 function CombatController:EquipWeapon(weaponName)
 	weaponName = weaponName or "Katana"
-	if self.Character:GetAttribute("IsEquipped") then return end
+	if self._isEquipping or self.Character:GetAttribute("IsEquipped") then return end
+	self._isEquipping = true
 
 	local wasSprinting        = self.CC.MovementController.IsSprinting
 	local wasSprintAnimPlaying = self.CC.MovementController._sprintAnimPlaying
@@ -79,14 +81,18 @@ function CombatController:EquipWeapon(weaponName)
 			if not keyframeHandled then
 				keyframeHandled = true
 				self.WeaponManager:WeldToHand()
+				self._isEquipping = false
 				connection:Disconnect()
 			end
 		end)
+	else
+		self._isEquipping = false
 	end
 end
 
 function CombatController:UnequipWeapon()
-	if not self.Character:GetAttribute("IsEquipped") then return end
+	if self._isEquipping or not self.Character:GetAttribute("IsEquipped") then return end
+	self._isEquipping = true
 
 	local wasSprinting        = self.CC.MovementController.IsSprinting
 	local wasSprintAnimPlaying = self.CC.MovementController._sprintAnimPlaying
@@ -119,9 +125,12 @@ function CombatController:UnequipWeapon()
 				self.CC.AnimationManager:Stop(weaponName .. "_WeaponIdle")
 				self.CC.AnimationManager:StopAll(0.2, false)
 				self.CurrentWeapon = nil
+				self._isEquipping = false
 				connection:Disconnect()
 			end
 		end)
+	else
+		self._isEquipping = false
 	end
 
 	task.delay(1.5, function()
@@ -131,6 +140,7 @@ function CombatController:UnequipWeapon()
 			self.CC.AnimationManager:Stop(weaponName .. "_WeaponIdle")
 			self.CC.AnimationManager:StopAll(0.2, false)
 			self.CurrentWeapon = nil
+			self._isEquipping = false
 		end
 	end)
 end
@@ -216,21 +226,6 @@ function CombatController:PerformCriticalAttack()
 	CombatRemotes.SkillRequest:FireServer(skillName)
 end
 
-function CombatController:PerformDefense()
-	if not self.CurrentWeapon or not self.WeaponManager:IsWeaponEquipped() then return end
-
-	local stateMachine = self.CC.StateMachine
-	if stateMachine:IsInState("Hitstun") or stateMachine:IsInState("KnockedOut") then return end
-	if stateMachine:IsInState("Attack") then
-		if self.CanQueueNextAttack and not self.QueuedAttack then
-			self.QueuedAttack = true
-		end
-		return
-	end
-
-	if not stateMachine:IsInState("Idle") then return end
-end
-
 -- ===== COMBO LOGIC =====
 function CombatController:ResetCombo()
 	self.ComboCount         = 0
@@ -298,8 +293,6 @@ function CombatController:SetupRemoteListeners()
 		if weapon and self.Character:GetAttribute("IsEquipped") then
 			self.CC.AnimationManager:Play(weapon .. "_Parried", 0.05)
 		end
-
-		print("[CombatController] Our attack was PARRIED!")
 	end)
 	table.insert(self._remoteConnections, gotParriedConn)
 end

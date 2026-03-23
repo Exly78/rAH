@@ -59,16 +59,13 @@ function BlockState:OnEnter(payload)
 		local track = playingTracks[1]
 		self.AnimationConnection = track.Stopped:Connect(function()
 			self.ParryStartupFinished = true
-			print("[BlockState] ParryStart animation finished")
 		end)
 	else
-		warn("[BlockState] ParryStart animation not found, using timer fallback")
 		task.delay(PARRY_WINDOW, function()
 			self.ParryStartupFinished = true
 		end)
 	end
 
-	print("[BlockState] Entered - Parry window active for " .. PARRY_WINDOW .. "s")
 end
 
 function BlockState:Update(dt)
@@ -87,14 +84,12 @@ function BlockState:Update(dt)
 			if self.HoldingBlock then
 				self:EnterBlockState(owner)
 			else
-				print("[BlockState] Parry window ended, not holding - return to Idle")
-				CombatRemotes.BlockEnded:FireServer()
+					CombatRemotes.BlockEnded:FireServer()
 				owner.StateMachine:SetState("Idle")
 				return
 			end
 		elseif not self.HoldingBlock and self.ParryStartupFinished then
-			print("[BlockState] Released F after animation finished - return to Idle")
-			CombatRemotes.BlockEnded:FireServer()
+				CombatRemotes.BlockEnded:FireServer()
 			owner.StateMachine:SetState("Idle")
 			return
 		end
@@ -102,8 +97,7 @@ function BlockState:Update(dt)
 		-- ===== BLOCKING STATE (after parry window) =====
 	elseif self.IsBlocking then
 		if not self.HoldingBlock then
-			print("[BlockState] Released block - return to Idle")
-			CombatRemotes.BlockEnded:FireServer()
+				CombatRemotes.BlockEnded:FireServer()
 			owner.StateMachine:SetState("Idle")
 			return
 		end
@@ -123,7 +117,6 @@ function BlockState:EnterBlockState(owner)
 	owner.AnimationManager:Stop(self:GetBlockAnimationName(owner, "ParryStart"), 0.1)
 	owner.AnimationManager:Play(self:GetBlockAnimationName(owner, "Block"), 0.1, false)
 
-	print("[BlockState] Entered blocking state - holding block")
 end
 
 -- ===== PARRY SUCCESS =====
@@ -134,7 +127,6 @@ function BlockState:OnParrySuccess()
 	self.ParrySucceeded = true
 
 	local owner = self:GetOwner()
-	print("[BlockState] PARRY SUCCESS!")
 
 	-- Stop the parrystart animation
 	owner.AnimationManager:Stop(self:GetBlockAnimationName(owner, "ParryStart"), 0.05)
@@ -163,7 +155,6 @@ end
 
 function BlockState:OnBlockHit()
 	local owner = self:GetOwner()
-	print("[BlockState] Attack blocked!")
 end
 
 function BlockState:OnExit()
@@ -195,7 +186,6 @@ function BlockState:OnExit()
 	self.ParryStartupFinished = false
 	self.ParrySucceeded = false
 
-	print("[BlockState] Exited block state")
 end
 
 function BlockState:GetBlockAnimationName(owner, animType)

@@ -201,27 +201,6 @@ function ServerCombatManager:RequestSkill(player, skillName, comboIndex)
 	return {success = true, skill = skill}
 end
 
-CombatRemotes.WeaponEquipped.OnServerEvent:Connect(function(player, weaponName)
-	local character = player.Character
-	if not character then return end
-
-	local weapon = WeaponData:GetWeapon(weaponName)
-	if not weapon then
-		warn("[SERVER] Invalid weapon:", weaponName)
-		return
-	end
-
-	character:SetAttribute("EquippedWeapon", weaponName)
-	print("[SERVER]", player.Name, "equipped", weaponName)
-end)
-
-CombatRemotes.WeaponUnequipped.OnServerEvent:Connect(function(player)
-	local character = player.Character
-	if not character then return end
-	character:SetAttribute("EquippedWeapon", nil)
-	print("[SERVER]", player.Name, "unequipped weapon")
-end)
-
 -- ===== BASIC ATTACK VALIDATION =====
 function ServerCombatManager:ValidateBasicAttack(player, character, comboIndex)
 	local weaponName = character:GetAttribute("EquippedWeapon")

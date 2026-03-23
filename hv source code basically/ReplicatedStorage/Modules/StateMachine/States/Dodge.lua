@@ -52,8 +52,6 @@ function DodgeState:OnEnter(payload)
 
 	local animName = isAirDash and "AirDash" or ("Dash" .. self.DodgeDirection)
 
-	print("[DodgeState] Dodging:", self.DodgeDirection, "Anim:", animName)
-
 	local playingTracks = owner.AnimationManager:Play(animName, 0.05)
 
 	if playingTracks and playingTracks[1] then
@@ -211,8 +209,6 @@ function DodgeState:OnDodgeSuccess()
 	self.DodgeSucceeded = true
 
 	local owner = self:GetOwner()
-	print("[DodgeState] PERFECT DODGE!")
-
 	-- Kill the dash motion immediately
 	if self.DodgeMotion then
 		self.DodgeMotion:Disconnect()

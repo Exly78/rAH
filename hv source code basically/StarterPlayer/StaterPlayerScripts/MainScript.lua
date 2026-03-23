@@ -22,6 +22,14 @@ humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
 
 print("=== COMBAT SYSTEM READY ===")
 
+-- ===== CLIENT-SIDE DEBOUNCES =====
+local DODGE_CD  = 0.65  -- slightly longer than DodgeDuration (0.45s)
+local BLOCK_CD  = 0.50  -- prevents rapid parry window farming
+local JUMP_CD   = 0.30  -- prevents jump spam
+local dodgeTime = 0
+local blockTime = 0
+local jumpTime  = 0
+
 controller.WantsDodge    = false
 controller.WantsBlock    = false
 controller.IsHoldingBlock = false
@@ -30,17 +38,25 @@ controller.IsHoldingBlock = false
 UIS.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 
+	local now   = tick()
 	local state = humanoid:GetState()
 
-	-- Jump
+	-- Jump (Space)
 	if input.KeyCode == Enum.KeyCode.Space then
-		if state ~= Enum.HumanoidStateType.Freefall then
+		if controller.StateMachine:IsInState("Slide") then
+			local slideState = controller.StateMachine.CurrentState
+			if slideState and slideState.OnJumpCancel then
+				slideState:OnJumpCancel()
+			end
+		elseif state ~= Enum.HumanoidStateType.Freefall and now >= jumpTime then
+			jumpTime = now + JUMP_CD
 			humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
 		end
 	end
 
 	-- Dodge (Q)
-	if input.KeyCode == Enum.KeyCode.Q then
+	if input.KeyCode == Enum.KeyCode.Q and now >= dodgeTime then
+		dodgeTime = now + DODGE_CD
 		controller.WantsDodge = true
 	end
 
@@ -52,25 +68,23 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 			if blockState and blockState.SetHolding then
 				blockState:SetHolding(true)
 			end
-		else
+		elseif now >= blockTime then
+			blockTime = now + BLOCK_CD
 			controller.WantsBlock    = true
 			controller.IsHoldingBlock = true
 		end
 	end
 
-	-- Equip / Unequip (E)
+	-- Equip / Unequip (E) — debounce handled inside CombatController._isEquipping
 	if input.KeyCode == Enum.KeyCode.E then
 		if character:GetAttribute("IsEquipped") then
 			controller.CombatController:UnequipWeapon()
-			print("[CONTROLS] Unequipped")
 		else
 			controller.CombatController:EquipWeapon("Katana")
-			print("[CONTROLS] Equipped")
 		end
 	end
 
 	-- Critical Attack (R)
-	-- Phase is determined inside PerformCriticalAttack based on AltCrit attribute
 	if input.KeyCode == Enum.KeyCode.R then
 		if character:GetAttribute("IsEquipped") then
 			controller.CombatController:PerformCriticalAttack()
@@ -83,7 +97,8 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 			controller.CombatController:PerformBasicAttack()
 		end
 	end
-	-- Input Began
+
+	-- Crouch / Slide (LeftControl)
 	if input.KeyCode == Enum.KeyCode.LeftControl then
 		if controller.StateMachine:IsInState("Slide") then
 			controller.IsHoldingCrouch = true
@@ -96,17 +111,6 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 			controller.IsHoldingCrouch = true
 		end
 	end
-
-	-- Jump during slide (cancel with momentum)
-	if input.KeyCode == Enum.KeyCode.Space then
-		if controller.StateMachine:IsInState("Slide") then
-			local slideState = controller.StateMachine.CurrentState
-			if slideState and slideState.OnJumpCancel then
-				slideState:OnJumpCancel()
-			end
-		end
-	end
-
 end)
 
 UIS.InputEnded:Connect(function(input, gameProcessed)

@@ -36,8 +36,8 @@ function SlideState.new()
 	self.HoldingCrouch = false
 	self.RaycastParams = nil
 	self.CrouchAnimTrack = nil
-	self.WasOnSlope = false           -- NEW: Track if we were on slope last frame
-	self.SlopeTransitionCooldown = 0  -- NEW: Cooldown to prevent bouncing
+	self.WasOnSlope = false
+	self.SlopeTransitionCooldown = 0
 	return setmetatable(self, SlideState)
 end
 
@@ -51,8 +51,6 @@ function SlideState:OnEnter(payload)
 
 	-- Check if sprinting (WalkSpeed will be 26 if sprinting)
 	local isSprinting = owner.Humanoid.WalkSpeed >= SLIDE_CONFIG.MIN_SPRINT_SPEED
-
-	print("[SlideState] OnEnter - WalkSpeed:", owner.Humanoid.WalkSpeed, "IsSprinting:", isSprinting)
 
 	-- Store original height
 	self.OriginalHeight = owner.Humanoid.HipHeight
@@ -71,8 +69,6 @@ function SlideState:OnEnter(payload)
 	local isOnGround = self:CheckGrounded(owner)
 
 	if not isOnGround then
-		-- Can't slide/crouch in air
-		print("[SlideState] Can't slide/crouch in air - returning to Idle")
 		owner.StateMachine:SetState("Idle")
 		return
 	end
@@ -101,16 +97,9 @@ function SlideState:StartSlide(owner)
 	self.IsSliding = true
 	self.IsCrouching = false
 
-	print("[SlideState] ✅ StartSlide called")
-
-	-- FORCE STOP SPRINTING
 	if owner.MovementController then
 		owner.MovementController:ForceStopSprintAnimation()
-		-- Also reset sprint state in MovementController
-		if owner.MovementController.IsSprinting then
-			owner.MovementController.IsSprinting = false
-		end
-		-- Reset input controller sprint toggle
+		owner.MovementController.IsSprinting = false
 		if owner.InputController and owner.InputController.ResetSprint then
 			owner.InputController:ResetSprint()
 		end
@@ -131,8 +120,6 @@ function SlideState:StartSlide(owner)
 	end
 	self.SlideSpeed = SLIDE_CONFIG.INITIAL_SPEED
 
-	print("[SlideState] Slide direction:", self.SlideDirection, "Speed:", self.SlideSpeed)
-
 	-- Disable normal movement but KEEP AutoRotate for shift-lock
 	owner.Humanoid.WalkSpeed = 0
 	owner.Humanoid.JumpHeight = 0  -- Can't jump during slide (until cancelled)
@@ -141,19 +128,11 @@ function SlideState:StartSlide(owner)
 	-- Crouch character
 	owner.Humanoid.HipHeight = self.OriginalHeight * SLIDE_CONFIG.CROUCH_HEIGHT
 
-	print("[SlideState] Set HipHeight to:", owner.Humanoid.HipHeight)
-
-	-- Play slide animation
 	owner.AnimationManager:Play("Slide", 0.1)
 
-	print("[SlideState] Started sliding at " .. self.SlideSpeed .. " studs/s")
-
-	-- Start slide physics
 	self.SlideConnection = RunService.Heartbeat:Connect(function(dt)
 		self:UpdateSlidePhysics(owner, dt)
 	end)
-
-	print("[SlideState] Physics connection started")
 end
 
 function SlideState:StartCrouch(owner)
@@ -161,39 +140,25 @@ function SlideState:StartCrouch(owner)
 	self.IsCrouching = true
 	owner.Character:SetAttribute("IsCrouching", true)
 
-	-- FORCE STOP SPRINTING
 	if owner.MovementController then
 		owner.MovementController:ForceStopSprintAnimation()
-		-- Reset sprint state
-		if owner.MovementController.IsSprinting then
-			owner.MovementController.IsSprinting = false
-		end
-		-- Reset input controller sprint toggle
+		owner.MovementController.IsSprinting = false
 		if owner.InputController and owner.InputController.ResetSprint then
 			owner.InputController:ResetSprint()
 		end
 	end
 
-	-- Reset to base walk speed first (in case coming from sprint)
-	local baseSpeed = owner.Character:GetAttribute("IsEquipped") and 14 or 16
-	owner.Humanoid.WalkSpeed = baseSpeed
-
-	-- Then set crouch speed
 	owner.Humanoid.WalkSpeed = SLIDE_CONFIG.CROUCH_SPEED
 	owner.Humanoid.JumpHeight = 5  -- Reduced jump height
 
 	-- Crouch character
 	owner.Humanoid.HipHeight = self.OriginalHeight * SLIDE_CONFIG.CROUCH_HEIGHT
 
-	-- Play crouch animation
 	local playingTracks = owner.AnimationManager:Play("Crouch", 0.1, false)
 	if playingTracks and playingTracks[1] then
 		self.CrouchAnimTrack = playingTracks[1]
-		-- Start with animation paused (will adjust speed based on movement)
 		self.CrouchAnimTrack:AdjustSpeed(0)
 	end
-
-	print("[SlideState] Started crouching at " .. SLIDE_CONFIG.CROUCH_SPEED .. " studs/s")
 end
 
 function SlideState:UpdateSlidePhysics(owner, dt)
@@ -218,8 +183,6 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 	local isOnGround = rayResult ~= nil
 
 	if not isOnGround then
-		-- In air - end slide
-		print("[SlideState] Left ground - ending slide")
 		if self.HoldingCrouch then
 			self:TransitionToCrouch(owner)
 		else
@@ -237,8 +200,6 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 		-- Calculate slope angle (0 = flat, 1 = vertical)
 		slopeAngle = 1 - normal:Dot(upVector)
 
-		print("[SlideState] 🔍 Slope angle:", slopeAngle, "Threshold:", SLIDE_CONFIG.SLOPE_THRESHOLD, "Cooldown:", self.SlopeTransitionCooldown)
-
 		-- Check if on a slope (with hysteresis to prevent bouncing)
 		local effectiveThreshold = SLIDE_CONFIG.SLOPE_THRESHOLD
 		if self.WasOnSlope then
@@ -249,8 +210,7 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 		if slopeAngle > effectiveThreshold then
 			onSlope = true
 			self.WasOnSlope = true
-			self.SlopeTransitionCooldown = 0.3  -- 0.3 second cooldown when entering slope
-			print("[SlideState] 🏔️ ON SLOPE!")
+			self.SlopeTransitionCooldown = 0.3
 
 			-- Disable AutoRotate on slopes (can't turn while sliding downhill)
 			humanoid.AutoRotate = false
@@ -259,33 +219,20 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 			local slopeRight = upVector:Cross(normal).Unit
 			local slopeForward = normal:Cross(slopeRight).Unit
 
-			print("[SlideState] Slope forward Y:", slopeForward.Y)
-
-			-- ALWAYS use the downhill direction on slopes (ignore player input)
-			-- Find which direction goes down
 			if slopeForward.Y < 0 then
-				-- This direction goes down
 				self.SlideDirection = slopeForward
-				print("[SlideState] ⬇️ Sliding downhill")
 			else
-				-- This direction goes up, so reverse it
 				self.SlideDirection = -slopeForward
-				print("[SlideState] ⬇️ Reversed to slide downhill")
 			end
 
 			-- Face slide direction on slopes
 			local lookCFrame = CFrame.lookAt(rootPart.Position, rootPart.Position + self.SlideDirection)
 			rootPart.CFrame = CFrame.new(rootPart.Position) * (lookCFrame - lookCFrame.Position)
 		else
-			-- Transitioning to flat ground
 			if self.WasOnSlope and self.SlopeTransitionCooldown > 0 then
-				-- In cooldown - keep slope behavior for a bit
-				print("[SlideState] ⏳ Slope cooldown active - maintaining slope physics")
-				onSlope = true  -- Pretend we're still on slope
+				onSlope = true
 				humanoid.AutoRotate = false
 			else
-				-- Cooldown expired or never on slope - normal flat behavior
-				print("[SlideState] 📏 Flat ground (angle too small)")
 				self.WasOnSlope = false
 				humanoid.AutoRotate = true
 
@@ -316,21 +263,14 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 
 	-- ===== SPEED CALCULATION =====
 	if slopeAngle < SLIDE_CONFIG.SLOPE_THRESHOLD then
-		-- FLAT GROUND - decelerate
-		print("[SlideState] 📉 Flat decel - Speed:", self.SlideSpeed)
 		self.SlideSpeed = math.max(
 			SLIDE_CONFIG.MIN_SLIDE_SPEED,
 			self.SlideSpeed - (SLIDE_CONFIG.DECELERATION_FLAT * dt)
 		)
 	else
-		-- ON SLOPE
 		if self.SlideDirection.Y < -0.05 then
-			-- GOING DOWNHILL - maintain or gain speed
-			print("[SlideState] 📈 Downhill accel - Speed:", self.SlideSpeed)
 			self.SlideSpeed = self.SlideSpeed + (SLIDE_CONFIG.ACCELERATION_DOWNHILL * slopeAngle * dt)
 		else
-			-- GOING UPHILL - decelerate faster
-			print("[SlideState] 📉 Uphill decel - Speed:", self.SlideSpeed)
 			self.SlideSpeed = math.max(
 				SLIDE_CONFIG.MIN_SLIDE_SPEED,
 				self.SlideSpeed - (SLIDE_CONFIG.DECELERATION_UPHILL * slopeAngle * dt)
@@ -352,9 +292,6 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 
 	-- ===== END SLIDE IF TOO SLOW =====
 	if self.SlideSpeed <= SLIDE_CONFIG.MIN_SLIDE_SPEED then
-		print("[SlideState] Slide ended (too slow)")
-
-		-- Check if there's a ceiling above
 		local headPosition = owner.Character:FindFirstChild("Head")
 		local hasCeiling = false
 
@@ -366,7 +303,6 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 
 			if rayResult then
 				hasCeiling = true
-				print("[SlideState] Ceiling detected - forcing crouch")
 			end
 		end
 
@@ -402,7 +338,6 @@ function SlideState:Update(dt)
 
 	-- Ground check: exit if player leaves the ground while crouching (e.g. walks off a ledge)
 	if self.IsCrouching and not self:CheckGrounded(owner) then
-		print("[SlideState] Left ground during crouch - returning to Idle")
 		owner.StateMachine:SetState("Idle")
 		return
 	end
@@ -420,9 +355,6 @@ function SlideState:Update(dt)
 			local rayResult = workspace:Raycast(rayOrigin, rayDirection, self.RaycastParams)
 
 			if rayResult then
-				-- Ceiling detected! Can't stand up
-				print("[SlideState] ⚠️ Can't stand up - ceiling detected!")
-				-- Force crouch to stay active
 				self.HoldingCrouch = true
 				return
 			end
@@ -456,8 +388,6 @@ function SlideState:OnJumpCancel()
 	end
 
 	if self.IsSliding then
-		print("[SlideState] Jump cancelled slide - keeping " .. (SLIDE_CONFIG.JUMP_MOMENTUM_KEEP * 100) .. "% momentum")
-
 		-- Keep momentum in slide direction
 		local horizontalMomentum = self.SlideDirection * self.SlideSpeed * SLIDE_CONFIG.JUMP_MOMENTUM_KEEP
 
@@ -471,8 +401,6 @@ function SlideState:OnJumpCancel()
 			currentVel.Y + SLIDE_CONFIG.JUMP_VERTICAL_BOOST,  -- Vertical boost
 			horizontalMomentum.Z + forwardBoost.Z   -- Momentum + boost
 		)
-
-		print("[SlideState] 🚀 Forward boost applied!")
 
 		-- Exit slide
 		owner.StateMachine:SetState("Idle")
@@ -507,8 +435,6 @@ function SlideState:OnExit()
 	-- Stop animations
 	owner.AnimationManager:Stop("Slide", 0.1)
 	owner.AnimationManager:Stop("Crouch", 0.1)
-
-	print("[SlideState] Exited slide/crouch")
 end
 
 function SlideState:CanTransitionTo(nextStateName)

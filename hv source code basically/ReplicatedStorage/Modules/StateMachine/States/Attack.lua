@@ -51,14 +51,10 @@ function AttackState:OnEnter(payload)
 
 		local track = payload.track or owner.AnimationManager:GetCurrentTrack()
 		if track then
-			local animName = track.Animation and track.Animation.Name or "Unknown"
-			print("[AttackState] Firing attack! Track length:", track.Length, "| Animation Name:", animName)
 			self.KeyframeConnection = track:GetMarkerReachedSignal("Hit"):Connect(function()
-				print("[AttackState] Hit marker reached on", animName)
 				if not self.HitboxCreated then
 					self.HitboxCreated = true
 					self:CreateHitbox(owner, self.ComboIndex)
-
 					if self.KeyframeConnection then
 						self.KeyframeConnection:Disconnect()
 						self.KeyframeConnection = nil
@@ -66,10 +62,8 @@ function AttackState:OnEnter(payload)
 				end
 			end)
 
-			-- fallback if marker doesn't exist
 			task.delay(track.Length * 0.9, function()
 				if not self.HitboxCreated and not self.IsFinished then
-					print("[AttackState] Fallback hitbox creation (no Hit marker found)")
 					self.HitboxCreated = true
 					self:CreateHitbox(owner, self.ComboIndex)
 				end

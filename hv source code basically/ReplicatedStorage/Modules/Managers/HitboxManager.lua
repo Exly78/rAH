@@ -64,7 +64,6 @@ function HitboxManager:CreateContinuous(attacker, config)
 			local boxCF = root.CFrame * CFrame.new(0, 0, -config.ForwardOffset)
 
 			local hits = self:_scan(attacker, boxCF, config.Size, hitMap)
-			print(hits)
 			for _, target in ipairs(hits) do
 				if config.OnHit then
 					config.OnHit(target)
@@ -79,6 +78,13 @@ function HitboxManager:Stop(attacker)
 		self.Active[attacker]:Disconnect()
 		self.Active[attacker] = nil
 	end
+end
+
+function HitboxManager:Destroy()
+	for attacker, conn in pairs(self.Active) do
+		conn:Disconnect()
+	end
+	self.Active = {}
 end
 
 return HitboxManager

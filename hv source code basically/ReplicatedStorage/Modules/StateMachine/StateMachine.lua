@@ -32,19 +32,11 @@ function StateMachine:SetState(name, payload)
 
 	if self.CurrentState then
 		if not self.CurrentState:CanTransitionTo(name) then
-			print("[StateMachine] Transition blocked by CanTransitionTo: " .. self.CurrentState.Name .. " -> " .. name)
 			return false
 		end
-	else
-
-	end
-
-	if self.CurrentState then
 		self.CurrentState:OnExit()
 		self.PreviousState = self.CurrentState
 	end
-
-	print("[StateMachine] Transitioning: " .. (self.PreviousState and self.PreviousState.Name or "None") .. " -> " .. name)
 	self.CurrentState = newState
 	self.CurrentState:OnEnter(payload)
 	return true

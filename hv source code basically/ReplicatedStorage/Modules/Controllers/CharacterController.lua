@@ -12,7 +12,7 @@ local IdleState = require(script.Parent.Parent.StateMachine.States.Idle)
 local AttackState = require(script.Parent.Parent.StateMachine.States.Attack)
 local HitstunState = require(script.Parent.Parent.StateMachine.States.Hitstun)
 local DodgeState = require(script.Parent.Parent.StateMachine.States.Dodge)
-local BlockState = require(script.Parent.Parent.StateMachine.States.Block)  -- NEW
+local BlockState = require(script.Parent.Parent.StateMachine.States.Block)
 local SlideState = require(script.Parent.Parent.StateMachine.States.Slide)
 local KnockedOutState = require(script.Parent.Parent.StateMachine.States.KnockedOut)
 
@@ -29,8 +29,8 @@ function CharacterController.new(character, playerData)
 	self.RootPart = character:WaitForChild("HumanoidRootPart")
 
 	self.WantsDodge = false
-	self.WantsBlock = false  -- NEW
-	self.IsHoldingBlock = false  -- NEW
+	self.WantsBlock = false
+	self.IsHoldingBlock = false
 	self.WantsSlide = false
 	self.IsHoldingCrouch = false
 	self.IsInvulnerableFlag = false
@@ -48,7 +48,7 @@ function CharacterController.new(character, playerData)
 	self.StateMachine:RegisterState(AttackState.new())
 	self.StateMachine:RegisterState(HitstunState.new())
 	self.StateMachine:RegisterState(DodgeState.new())
-	self.StateMachine:RegisterState(BlockState.new())  -- NEW
+	self.StateMachine:RegisterState(BlockState.new())
 	self.StateMachine:RegisterState(KnockedOutState.new())
 	self.StateMachine:RegisterState(SlideState.new())
 	self.StateMachine:Start()
@@ -57,7 +57,6 @@ function CharacterController.new(character, playerData)
 	self.CombatController.WeaponManager:AddWeaponToCharacter(defaultWeapon)
 	self.CombatController.CurrentWeapon = defaultWeapon
 
-	print("[CharacterController] Initialized for " .. character.Name)
 	return self
 end
 
@@ -78,7 +77,7 @@ function CharacterController:WantsToDodge()
 	return self.WantsDodge
 end
 
-function CharacterController:WantsToBlock()  -- NEW
+function CharacterController:WantsToBlock()
 	return self.WantsBlock
 end
 function CharacterController:WantsToSlide()
