@@ -19,8 +19,9 @@ local SLIDE_CONFIG = {
 	SLOPE_THRESHOLD = 0.03,       -- Minimum slope to be considered a slope (LOWERED from 0.1)
 	STEEP_SLOPE = 0.5,            -- Slope angle where gravity really kicks in
 	JUMP_MOMENTUM_KEEP = 0.7,     -- Keep 70% of slide speed when jumping out
-	JUMP_FORWARD_BOOST = 15,      -- Extra forward push when jumping (studs)
+	JUMP_FORWARD_BOOST = 30,      -- Extra forward push when jumping (studs)
 	JUMP_VERTICAL_BOOST = 25,     -- Vertical jump boost (studs)
+	JUMP_TAPER_DURATION = 0.55,   -- How long the lunge boost tapers off (seconds)
 	CROUCH_SPEED = 7,             -- Movement speed while crouching
 	CROUCH_HEIGHT = 0.5,          -- Humanoid height multiplier when crouched
 	CAMERA_STEER_INFLUENCE = 0.8, -- How much camera affects slide direction (0 = none, 1 = full)
@@ -39,7 +40,12 @@ function SlideState.new()
 	self.CrouchAnimTrack = nil
 	self.WasOnSlope = false
 	self.SlopeTransitionCooldown = 0
+	self.IsAttacking = false
 	return setmetatable(self, SlideState)
+end
+
+function SlideState:SetAttacking(attacking)
+	self.IsAttacking = attacking
 end
 
 function SlideState:OnEnter(payload)
@@ -265,8 +271,10 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 
 	-- ===== SPEED CALCULATION =====
 	if slopeAngle < SLIDE_CONFIG.SLOPE_THRESHOLD then
+		-- During a slide attack let speed bleed all the way to 0 (negative acceleration feel)
+		local minSpeed = self.IsAttacking and 0 or SLIDE_CONFIG.MIN_SLIDE_SPEED
 		self.SlideSpeed = math.max(
-			SLIDE_CONFIG.MIN_SLIDE_SPEED,
+			minSpeed,
 			self.SlideSpeed - (SLIDE_CONFIG.DECELERATION_FLAT * dt)
 		)
 	else
@@ -293,7 +301,8 @@ function SlideState:UpdateSlidePhysics(owner, dt)
 	-- (AutoRotate handles flat ground, manual rotation handles slopes)
 
 	-- ===== END SLIDE IF TOO SLOW =====
-	if self.SlideSpeed <= SLIDE_CONFIG.MIN_SLIDE_SPEED then
+	-- Don't end during a slide attack — let it decelerate fully then exit after attack
+	if self.SlideSpeed <= SLIDE_CONFIG.MIN_SLIDE_SPEED and not self.IsAttacking then
 		local headPosition = owner.Character:FindFirstChild("Head")
 		local hasCeiling = false
 
@@ -344,8 +353,8 @@ function SlideState:Update(dt)
 		return
 	end
 
-	-- Check if still holding crouch
-	if not self.HoldingCrouch then
+	-- Check if still holding crouch (don't exit mid slide-attack)
+	if not self.HoldingCrouch and not self.IsAttacking then
 		-- Released ctrl - try to stand up
 
 		-- Check if there's a ceiling above (can't stand up if blocked)
@@ -362,7 +371,12 @@ function SlideState:Update(dt)
 			end
 		end
 
-		-- No ceiling - safe to stand up
+		-- No ceiling - safe to stand up.
+		-- Only resume sprint if we were actually sliding (not if we slid into crouch and held ctrl)
+		if self.IsSliding and owner.InputController.InputState.W then
+			owner.InputController.SprintToggled = true
+			owner.MovementController._wasSprintingLastFrame = false
+		end
 		owner.StateMachine:SetState("Idle")
 		return
 	end
@@ -390,21 +404,35 @@ function SlideState:OnJumpCancel()
 	end
 
 	if self.IsSliding then
-		-- Keep momentum in slide direction
-		local horizontalMomentum = self.SlideDirection * self.SlideSpeed * SLIDE_CONFIG.JUMP_MOMENTUM_KEEP
-
-		-- Add forward boost (extra push in slide direction)
-		local forwardBoost = self.SlideDirection * SLIDE_CONFIG.JUMP_FORWARD_BOOST
-
+		local peakH = self.SlideDirection * (self.SlideSpeed * SLIDE_CONFIG.JUMP_MOMENTUM_KEEP + SLIDE_CONFIG.JUMP_FORWARD_BOOST)
 		local currentVel = owner.RootPart.AssemblyLinearVelocity
 
 		owner.RootPart.AssemblyLinearVelocity = Vector3.new(
-			horizontalMomentum.X + forwardBoost.X,  -- Momentum + boost
-			currentVel.Y + SLIDE_CONFIG.JUMP_VERTICAL_BOOST,  -- Vertical boost
-			horizontalMomentum.Z + forwardBoost.Z   -- Momentum + boost
+			peakH.X,
+			currentVel.Y + SLIDE_CONFIG.JUMP_VERTICAL_BOOST,
+			peakH.Z
 		)
 
-		-- Exit slide
+		-- Taper horizontal boost back to normal run speed
+		local peakSpeed   = Vector2.new(peakH.X, peakH.Z).Magnitude
+		local targetSpeed = 26  -- sprint speed to settle into
+		local elapsed     = 0
+		local taperConn
+		taperConn = RunService.Heartbeat:Connect(function(dt)
+			elapsed = elapsed + dt
+			local t  = math.min(elapsed / SLIDE_CONFIG.JUMP_TAPER_DURATION, 1)
+			local cv = owner.RootPart.AssemblyLinearVelocity
+			local hv = Vector2.new(cv.X, cv.Z)
+			if hv.Magnitude > 0.1 then
+				local dir      = hv.Unit
+				local newSpeed = peakSpeed + (targetSpeed - peakSpeed) * t
+				owner.RootPart.AssemblyLinearVelocity = Vector3.new(dir.X * newSpeed, cv.Y, dir.Y * newSpeed)
+			end
+			if t >= 1 then
+				taperConn:Disconnect()
+			end
+		end)
+
 		owner.StateMachine:SetState("Idle")
 	end
 end

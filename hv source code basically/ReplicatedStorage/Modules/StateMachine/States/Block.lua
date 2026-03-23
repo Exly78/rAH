@@ -165,6 +165,10 @@ function BlockState:OnExit()
 		self.AnimationConnection = nil
 	end
 
+	-- Always tell the server to clear block state, regardless of how we exited
+	-- (normal release fires BlockEnded in Update; hitstun/forced transitions do not)
+	CombatRemotes.BlockEnded:FireServer()
+
 	-- Remove all blocking/parry TAGS
 	TagManager.RemoveTag(owner.Character, "CanParry")
 	TagManager.RemoveTag(owner.Character, "Parrying")

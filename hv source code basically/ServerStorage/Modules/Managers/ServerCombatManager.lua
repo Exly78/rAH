@@ -649,10 +649,8 @@ function ServerCombatManager:ApplyDamage(attacker, target, damageData)
 	-- BlockOnly + target not blocking: HP damage only, no posture (attack isn't meant to drain posture)
 	-- Any bypass-block type + target was blocking but block didn't apply: no posture (block was irrelevant)
 	local isTargetBlocking = TagManager.HasTag(target, "IsBlocking")
-	local shouldApplyPosture = true
-	if attackType == "BlockOnly" and not isTargetBlocking then
-		shouldApplyPosture = false
-	elseif isTargetBlocking and isFacingAttacker and not attackOpts.canBlock then
+	local shouldApplyPosture = isTargetBlocking
+	if isTargetBlocking and isFacingAttacker and not attackOpts.canBlock then
 		shouldApplyPosture = false
 	end
 

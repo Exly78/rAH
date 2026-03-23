@@ -19,6 +19,7 @@ function AttackState.new()
 	self.ComboQueuingEnabled = false
 	self.HitboxManager = HitboxManager.new()
 	self.ActiveHitTargets = {}
+	self._generation = 0
 	return setmetatable(self, AttackState)
 end
 
@@ -36,6 +37,8 @@ function AttackState:OnEnter(payload)
 	self.InEndlag = false
 	self.EndlagTimer = 0
 	self.HitboxCreated = false
+	self._generation = self._generation + 1
+	local gen = self._generation
 
 	if movement._sprintAnimPlaying then
 		movement:ForceStopSprintAnimation()
@@ -63,6 +66,7 @@ function AttackState:OnEnter(payload)
 			end)
 
 			task.delay(track.Length * 0.9, function()
+				if self._generation ~= gen then return end
 				if not self.HitboxCreated and not self.IsFinished then
 					self.HitboxCreated = true
 					self:CreateHitbox(owner, self.ComboIndex)
@@ -70,6 +74,7 @@ function AttackState:OnEnter(payload)
 			end)
 
 			task.delay(track.Length * 0.6, function()
+				if self._generation ~= gen then return end
 				if not self.IsFinished then
 					self.ComboQueuingEnabled = true
 					combat.CanQueueNextAttack = true
@@ -167,9 +172,12 @@ function AttackState:OnExit()
 		self.KeyframeConnection = nil
 	end
 
+	-- Mark as finished so any orphaned task.delay callbacks (hitbox, combo queue)
+	-- see IsFinished = true and self-cancel instead of firing after state exit
+	self.IsFinished = true
+
 	self.SkillName = nil
 	self.AttackType = nil
-	self.IsFinished = false
 	self.Timer = 0
 	self.AnimationTrack = nil
 	self.EndlagTimer = 0

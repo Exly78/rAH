@@ -28,6 +28,8 @@ function CombatController.new(characterController)
 	self.CanQueueNextAttack  = false
 	self._isEquipping        = false
 	self._slideAttackTime    = 0
+	self._runAttackTime      = 0
+	self.IsRunAttacking      = false
 
 	self.Character:SetAttribute("IsEquipped", false)
 	self.Character:SetAttribute("WeaponDamageMultiplier", DAMAGE_MULTIPLIERS.UNARMED)
@@ -71,7 +73,7 @@ function CombatController:EquipWeapon(weaponName)
 	self.Character:SetAttribute("WeaponDamageMultiplier", DAMAGE_MULTIPLIERS.KATANA)
 	CombatRemotes.WeaponEquipped:FireServer(weaponName)
 
-	self.CC.AnimationManager:Play(weaponName .. "_WeaponIdle", 0)
+	self.CC.AnimationManager:Play(weaponName .. "_WeaponIdle", 0.15)
 	local equipTracks = self.CC.AnimationManager:Play(weaponName .. "_Equip")
 
 	if wasSprinting and self.CC.MovementController.IsMoving then
@@ -168,6 +170,7 @@ function CombatController:PerformBasicAttack()
 
 	local stateMachine = self.CC.StateMachine
 	if stateMachine:IsInState("Hitstun") or stateMachine:IsInState("KnockedOut") then return end
+	if self.IsRunAttacking then return end
 
 	if stateMachine:IsInState("Attack") then
 		if self.CanQueueNextAttack and not self.QueuedAttack then
@@ -178,10 +181,16 @@ function CombatController:PerformBasicAttack()
 
 	if not stateMachine:IsInState("Idle") then return end
 
+	-- Run attack when sprinting
+	if self.CC.MovementController.IsSprinting then
+		self:PerformRunAttack()
+		return
+	end
+
 	self:AdvanceCombo()
 	local attackAnim  = "Attack" .. self.ComboCount
 	local weapon      = self.CurrentWeapon
-	local attackTracks = self.CC.AnimationManager:Play(weapon .. "_" .. attackAnim, 0, true)
+	local attackTracks = self.CC.AnimationManager:Play(weapon .. "_" .. attackAnim, 0.1, true)
 	local attackTrack  = attackTracks and attackTracks[1] or nil
 
 	stateMachine:SetState("Attack", {
@@ -192,6 +201,96 @@ function CombatController:PerformBasicAttack()
 	})
 
 	CombatRemotes.SkillRequest:FireServer("BasicAttack", self.ComboCount)
+end
+
+-- ===== RUN ATTACK =====
+function CombatController:PerformRunAttack()
+	if tick() < self._runAttackTime then return end
+	self._runAttackTime = tick() + 1.0
+
+	local rootPart = self.CC.RootPart
+	local weapon   = self.CurrentWeapon
+
+	-- Lock onto the direction the character is currently facing
+	local look   = rootPart.CFrame.LookVector
+	local runDir = Vector3.new(look.X, 0, look.Z).Unit
+	local startSpeed = self.CC.MovementController.Humanoid.WalkSpeed
+
+	-- Stop sprint so MovementController doesn't fight the locked direction
+	self.CC.MovementController:ForceStopSprintAnimation()
+	self.CC.MovementController.IsSprinting = false
+	self.CC.InputController:ResetSprint()
+
+	self.IsRunAttacking = true
+	self.CC.Humanoid.AutoRotate = false
+
+	local tracks = self.CC.AnimationManager:Play(weapon .. "_RunAttack", 0.05, true)
+	local track  = tracks and tracks[1] or nil
+	local attackDuration = (track and track.Length) or 0.7
+
+	CombatRemotes.SkillRequest:FireServer("RunAttack")
+
+	-- Initial lunge burst
+	local LUNGE_BOOST = 15
+	local curVel = rootPart.AssemblyLinearVelocity
+	rootPart.AssemblyLinearVelocity = Vector3.new(
+		runDir.X * (startSpeed + LUNGE_BOOST),
+		curVel.Y,
+		runDir.Z * (startSpeed + LUNGE_BOOST)
+	)
+
+	-- Decelerate from boosted speed to 0 over the attack duration
+	local boostedSpeed = startSpeed + LUNGE_BOOST
+	local elapsed = 0
+	local RunService = game:GetService("RunService")
+	local momentumConn
+	momentumConn = RunService.Heartbeat:Connect(function(dt)
+		elapsed = elapsed + dt
+		local t = math.min(elapsed / attackDuration, 1)
+		local speed = boostedSpeed * (1 - t)
+		local vel   = runDir * speed
+		local cv    = rootPart.AssemblyLinearVelocity
+		rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, cv.Y, vel.Z)
+		if t >= 1 then
+			momentumConn:Disconnect()
+			momentumConn = nil
+		end
+	end)
+
+	-- Hitbox
+	local hitFired = false
+	if track then
+		local conn
+		conn = track:GetMarkerReachedSignal("Hit"):Connect(function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("RunAttack", 1)
+				conn:Disconnect()
+			end
+		end)
+		task.delay(attackDuration * 0.9, function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("RunAttack", 1)
+			end
+		end)
+	else
+		task.delay(0.3, function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("RunAttack", 1)
+			end
+		end)
+	end
+
+	task.delay(attackDuration, function()
+		self.IsRunAttacking = false
+		self.CC.Humanoid.AutoRotate = true
+		if momentumConn then
+			momentumConn:Disconnect()
+			momentumConn = nil
+		end
+	end)
 end
 
 -- ===== SLIDE ATTACK =====
@@ -209,11 +308,16 @@ function CombatController:PerformSlideAttack()
 	if tick() < self._slideAttackTime then return end
 	self._slideAttackTime = tick() + 1.0
 
+	-- Lock slide so it doesn't end mid-attack
+	slideState:SetAttacking(true)
+
 	local weapon = self.CurrentWeapon
 	local tracks = self.CC.AnimationManager:Play(weapon .. "_SlideAttack", 0.05, true)
 	local track  = tracks and tracks[1] or nil
 
 	CombatRemotes.SkillRequest:FireServer("SlideAttack")
+
+	local attackDuration = (track and track.Length) or 0.8
 
 	local hitFired = false
 	if track then
@@ -225,7 +329,7 @@ function CombatController:PerformSlideAttack()
 				conn:Disconnect()
 			end
 		end)
-		task.delay(track.Length * 0.9, function()
+		task.delay(attackDuration * 0.9, function()
 			if not hitFired then
 				hitFired = true
 				CombatRemotes.CreateHitbox:FireServer("SlideAttack", 1)
@@ -239,6 +343,11 @@ function CombatController:PerformSlideAttack()
 			end
 		end)
 	end
+
+	-- Release the slide lock when the animation finishes
+	task.delay(attackDuration, function()
+		slideState:SetAttacking(false)
+	end)
 end
 
 -- ===== CRITICAL ATTACK =====
@@ -310,6 +419,10 @@ function CombatController:ApplyHitstun(duration)
 	if self.CC:IsInvulnerable() then return end
 
 	TagManager.AddTag(self.Character, "Hitstunned", duration)
+
+	-- If blocking, stay in Block state — BlockImpact handles the reaction visually
+	if self.CC.StateMachine:IsInState("Block") then return end
+
 	self.CC:PlayAnimation("Hitstun")
 
 	if not self.CC.StateMachine:IsInState("Hitstun") then

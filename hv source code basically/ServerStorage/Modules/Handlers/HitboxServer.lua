@@ -1,7 +1,8 @@
 -- ServerStorage.Modules.Handlers.HitboxServer
 -- Handles skill authorization and hitbox creation remote events.
 
-local SkillData = require(game.ReplicatedStorage.Modules.Data.SkillData)
+local SkillData  = require(game.ReplicatedStorage.Modules.Data.SkillData)
+local TagManager = require(game.ReplicatedStorage.Modules.Managers.TagManager)
 
 local HitboxServer = {}
 
@@ -51,6 +52,12 @@ function HitboxServer.Setup(managers, CombatRemotes)
 
 		if tick() - auth.timestamp > 2 then
 			warn("[HitboxServer] Expired hitbox auth from", player.Name)
+			AuthorizedSkills[player.UserId] = nil
+			return
+		end
+
+		-- Reject if attacker was hitstunned after the skill was authorized
+		if TagManager.HasTag(attacker, "Hitstunned") or TagManager.HasTag(attacker, "KnockedOut") then
 			AuthorizedSkills[player.UserId] = nil
 			return
 		end

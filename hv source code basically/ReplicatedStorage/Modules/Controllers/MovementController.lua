@@ -35,7 +35,19 @@ function MovementController:Update(dt, moveVector, sprintToggled)
 	self.IsMoving = moveVector.Magnitude > 0
 	local moveDir = self.IsMoving and moveVector.Unit or Vector3.zero
 
-	local inDodge = self.CC.StateMachine:IsInState("Dodge")
+	local inDodge      = self.CC.StateMachine:IsInState("Dodge")
+	local inRunAttack  = self.CC.CombatController.IsRunAttacking
+
+	-- Run attack drives its own velocity — suppress all normal movement input
+	if inRunAttack then
+		self.Humanoid:Move(Vector3.zero, false)
+		if self.IsSprinting or self._sprintAnimPlaying then
+			self.IsSprinting = false
+			self._wasSprintingLastFrame = false
+			self:ForceStopSprintAnimation()
+		end
+		return
+	end
 
 	-- Movement locked (except dodge)
 	if self:IsMovementLocked() and not inDodge then
@@ -168,7 +180,7 @@ function MovementController:ForceStopSprintAnimation()
 		and (weapon .. "_Sprint")
 		or "Sprint"
 
-	self.CC.AnimationManager:Stop(sprintKey, 0)
+	self.CC.AnimationManager:Stop(sprintKey, 0.06)
 	self._sprintAnimPlaying = false
 end
 
