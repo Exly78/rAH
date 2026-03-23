@@ -1,4 +1,4 @@
-# rAH — Combat System Documentation
+# Hollow Veil — Combat System Documentation
 
 ## Table of Contents
 1. [Project Overview](#1-project-overview)
@@ -49,7 +49,7 @@
 
 ## 1. Project Overview
 
-rAH is a multiplayer action RPG combat system built for Roblox. It features:
+Hollow Veil is a multiplayer action RPG combat system built for Roblox. It features:
 
 - A **state machine** that controls every character action (attacking, blocking, dodging, sliding, hitstun, knockedout)
 - A **server-authoritative** combat model — clients propose actions, the server validates and applies all damage
