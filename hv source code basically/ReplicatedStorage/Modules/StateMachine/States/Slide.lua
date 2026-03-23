@@ -1,6 +1,7 @@
 --ReplicatedStorage.Modules.StateMachine.States.Slide
 
 local State = require(script.Parent.Parent.State)
+local CombatRemotes = require(game.ReplicatedStorage.Modules.Remotes.CombatRemotes)
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
@@ -139,6 +140,7 @@ function SlideState:StartCrouch(owner)
 	self.IsSliding = false
 	self.IsCrouching = true
 	owner.Character:SetAttribute("IsCrouching", true)
+	CombatRemotes.CrouchStarted:FireServer()
 
 	if owner.MovementController then
 		owner.MovementController:ForceStopSprintAnimation()
@@ -431,6 +433,9 @@ function SlideState:OnExit()
 
 	-- Clear crouch attribute
 	owner.Character:SetAttribute("IsCrouching", false)
+	if self.IsCrouching then
+		CombatRemotes.CrouchEnded:FireServer()
+	end
 
 	-- Stop animations
 	owner.AnimationManager:Stop("Slide", 0.1)
@@ -439,7 +444,7 @@ end
 
 function SlideState:CanTransitionTo(nextStateName)
 	-- Can be interrupted by hitstun/knockedout
-	return nextStateName == "Hitstun" 
+	return nextStateName == "Hitstun"
 		or nextStateName == "KnockedOut"
 		or nextStateName == "Idle"
 end

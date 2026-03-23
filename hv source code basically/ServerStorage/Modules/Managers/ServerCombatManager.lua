@@ -646,7 +646,17 @@ function ServerCombatManager:ApplyDamage(attacker, target, damageData)
 	end
 
 	-- ===== POSTURE DAMAGE =====
-	if damageData.PostureDamage then
+	-- BlockOnly + target not blocking: HP damage only, no posture (attack isn't meant to drain posture)
+	-- Any bypass-block type + target was blocking but block didn't apply: no posture (block was irrelevant)
+	local isTargetBlocking = TagManager.HasTag(target, "IsBlocking")
+	local shouldApplyPosture = true
+	if attackType == "BlockOnly" and not isTargetBlocking then
+		shouldApplyPosture = false
+	elseif isTargetBlocking and isFacingAttacker and not attackOpts.canBlock then
+		shouldApplyPosture = false
+	end
+
+	if damageData.PostureDamage and shouldApplyPosture then
 		local currentPosture = target:GetAttribute("Posture") or 0
 		local maxPosture     = target:GetAttribute("MaxPosture") or 100
 		local newPosture     = math.min(maxPosture, currentPosture + damageData.PostureDamage)

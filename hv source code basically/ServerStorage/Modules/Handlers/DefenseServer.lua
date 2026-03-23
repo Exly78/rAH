@@ -81,6 +81,19 @@ function DefenseServer.Setup(managers, CombatRemotes)
 		TagManager.RemoveTag(character, "Blocking")
 	end)
 
+	CombatRemotes.CrouchStarted.OnServerEvent:Connect(function(player)
+		if not player or not player.Character then return end
+		local character = player.Character
+		if healthManager:IsDead(character) then return end
+		TagManager.Initialize(character)
+		TagManager.AddTag(character, "Crouching")  -- no duration; removed on CrouchEnded
+	end)
+
+	CombatRemotes.CrouchEnded.OnServerEvent:Connect(function(player)
+		if not player or not player.Character then return end
+		TagManager.RemoveTag(player.Character, "Crouching")
+	end)
+
 	-- Return cooldown tables so CombatServer can clean them up on PlayerRemoving
 	return {
 		DodgeCooldowns = DodgeCooldowns,

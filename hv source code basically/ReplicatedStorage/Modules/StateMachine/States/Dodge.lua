@@ -79,21 +79,31 @@ function DodgeState:GetDodgeDirection(owner)
 	local humanoid = owner.Humanoid
 	local state = humanoid:GetState()
 
-	local forward = UIS:IsKeyDown(Enum.KeyCode.W)
+	local forward  = UIS:IsKeyDown(Enum.KeyCode.W)
 	local backward = UIS:IsKeyDown(Enum.KeyCode.S)
-	local left = UIS:IsKeyDown(Enum.KeyCode.A)
-	local right = UIS:IsKeyDown(Enum.KeyCode.D)
+	local left     = UIS:IsKeyDown(Enum.KeyCode.A)
+	local right    = UIS:IsKeyDown(Enum.KeyCode.D)
 
 	if state == Enum.HumanoidStateType.Running or state == Enum.HumanoidStateType.Landed then
-		if forward and left then return "ForwardLeft"
-		elseif forward and right then return "ForwardRight"
-		elseif backward and left then return "BackwardLeft"
-		elseif backward and right then return "BackwardRight"
-		elseif forward then return "Forward"
-		elseif backward then return "Backward"
-		elseif left then return "Left"
-		elseif right then return "Right"
-		else return "Backward" end
+		local isShiftLock = UIS.MouseBehavior == Enum.MouseBehavior.LockCenter
+
+		if isShiftLock then
+			if forward and left then return "ForwardLeft"
+			elseif forward and right then return "ForwardRight"
+			elseif backward and left then return "BackwardLeft"
+			elseif backward and right then return "BackwardRight"
+			elseif forward then return "Forward"
+			elseif backward then return "Backward"
+			elseif left then return "Left"
+			elseif right then return "Right"
+			else return "Backward" end
+		else
+			-- Non-shift-lock: character always faces their movement direction.
+			-- Dodge forward (toward where the character is facing) when any key
+			-- is held; backward when standing still.
+			local anyKey = forward or backward or left or right
+			return anyKey and "Forward" or "Backward"
+		end
 	end
 
 	if state == Enum.HumanoidStateType.Freefall then
@@ -145,7 +155,13 @@ function DodgeState:StartDodgeMotion(owner, direction)
 		elseif direction == "BackwardRight" then charRelativeDir = (-charForward + charRight).Unit
 		else charRelativeDir = charForward end
 
-		dashDir = (inputDir * self.CameraInfluence + charRelativeDir * (1 - self.CameraInfluence)).Unit
+		-- In shift lock the character always faces the camera, so blending is fine.
+		-- In non-shift-lock the character faces their movement direction, so use
+		-- character-relative direction only to match actual movement.
+		local isShiftLock = UIS.MouseBehavior == Enum.MouseBehavior.LockCenter
+		local influence = isShiftLock and self.CameraInfluence or 0
+
+		dashDir = (inputDir * influence + charRelativeDir * (1 - influence)).Unit
 	end
 
 	if not dashDir or dashDir.Magnitude == 0 then

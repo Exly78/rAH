@@ -92,7 +92,11 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 	-- Basic Attack (Left Click)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 then
 		if character:GetAttribute("IsEquipped") then
-			controller.CombatController:PerformBasicAttack()
+			if controller.StateMachine:IsInState("Slide") then
+				controller.CombatController:PerformSlideAttack()
+			else
+				controller.CombatController:PerformBasicAttack()
+			end
 		end
 	end
 

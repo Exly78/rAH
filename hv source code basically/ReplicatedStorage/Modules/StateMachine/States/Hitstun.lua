@@ -17,7 +17,9 @@ function HitstunState:OnEnter(payload)
 	self.Duration = payload.duration or 0.3
 	self.ElapsedTime = 0
 
-	--owner:PlayAnimation("Hitstun")
+	local hitAnim = math.random(1, 2) == 1 and "Hit1" or "Hit2"
+	owner.AnimationManager:StopAll(0.05, false)
+	owner.AnimationManager:Play(hitAnim, 0.05)
 	owner:SetInvulnerable(false)
 end
 

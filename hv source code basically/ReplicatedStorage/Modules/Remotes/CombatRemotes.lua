@@ -39,9 +39,11 @@ CombatRemotes.WeaponWeldToHand = GetOrCreateRemote("WeaponWeldToHand", "RemoteEv
 CombatRemotes.WeaponWeldToBody = GetOrCreateRemote("WeaponWeldToBody", "RemoteEvent")
 
 -- Defense state (client -> server)
-CombatRemotes.DodgeStarted = GetOrCreateRemote("DodgeStarted", "RemoteEvent")
-CombatRemotes.BlockStarted = GetOrCreateRemote("BlockStarted", "RemoteEvent")
-CombatRemotes.BlockEnded = GetOrCreateRemote("BlockEnded", "RemoteEvent")
+CombatRemotes.DodgeStarted   = GetOrCreateRemote("DodgeStarted",   "RemoteEvent")
+CombatRemotes.BlockStarted   = GetOrCreateRemote("BlockStarted",   "RemoteEvent")
+CombatRemotes.BlockEnded     = GetOrCreateRemote("BlockEnded",     "RemoteEvent")
+CombatRemotes.CrouchStarted  = GetOrCreateRemote("CrouchStarted",  "RemoteEvent")
+CombatRemotes.CrouchEnded    = GetOrCreateRemote("CrouchEnded",    "RemoteEvent")
 
 -- Combat feedback (server -> client)
 CombatRemotes.DodgeSuccess = GetOrCreateRemote("DodgeSuccess", "RemoteEvent")

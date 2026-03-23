@@ -27,6 +27,7 @@ function CombatController.new(characterController)
 	self.QueuedAttack        = false
 	self.CanQueueNextAttack  = false
 	self._isEquipping        = false
+	self._slideAttackTime    = 0
 
 	self.Character:SetAttribute("IsEquipped", false)
 	self.Character:SetAttribute("WeaponDamageMultiplier", DAMAGE_MULTIPLIERS.UNARMED)
@@ -191,6 +192,53 @@ function CombatController:PerformBasicAttack()
 	})
 
 	CombatRemotes.SkillRequest:FireServer("BasicAttack", self.ComboCount)
+end
+
+-- ===== SLIDE ATTACK =====
+function CombatController:PerformSlideAttack()
+	if not self.CurrentWeapon or not self.WeaponManager:IsWeaponEquipped() then return end
+
+	local stateMachine = self.CC.StateMachine
+	if not stateMachine:IsInState("Slide") then return end
+
+	local slideState = stateMachine.States["Slide"]
+	if not slideState or not slideState.IsSliding then return end
+
+	if TagManager.HasTag(self.Character, "Hitstunned") or TagManager.HasTag(self.Character, "KnockedOut") then return end
+
+	if tick() < self._slideAttackTime then return end
+	self._slideAttackTime = tick() + 1.0
+
+	local weapon = self.CurrentWeapon
+	local tracks = self.CC.AnimationManager:Play(weapon .. "_SlideAttack", 0.05, true)
+	local track  = tracks and tracks[1] or nil
+
+	CombatRemotes.SkillRequest:FireServer("SlideAttack")
+
+	local hitFired = false
+	if track then
+		local conn
+		conn = track:GetMarkerReachedSignal("Hit"):Connect(function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("SlideAttack", 1)
+				conn:Disconnect()
+			end
+		end)
+		task.delay(track.Length * 0.9, function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("SlideAttack", 1)
+			end
+		end)
+	else
+		task.delay(0.3, function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("SlideAttack", 1)
+			end
+		end)
+	end
 end
 
 -- ===== CRITICAL ATTACK =====

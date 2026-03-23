@@ -46,6 +46,8 @@ local UNIVERSAL_ANIMATIONS = {
 
 local BASE_ANIMATIONS = {
 	Idle = "Combat/Idle",
+	Hit1 = "Combat/Hit1",
+	Hit2 = "Combat/Hit2",
 }
 
 function AnimationManager.new(character)

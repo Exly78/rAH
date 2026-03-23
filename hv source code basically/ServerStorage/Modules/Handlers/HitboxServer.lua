@@ -114,8 +114,10 @@ function HitboxServer.Setup(managers, CombatRemotes)
 
 		local damageMultiplier = comboIndex and (1.0 + (comboIndex - 1) * 0.15) or 1.0
 
+		local isJumpOnly = (skill.AttackType == "JumpOnly")
+
 		for _, target in ipairs(targetsHit) do
-			combatManager:ApplyDamage(attacker, target, {
+			local dmgTable = {
 				Damage                = skill.Damage * damageMultiplier,
 				HitstunDuration       = skill.HitstunDuration,
 				StatusEffects         = skill.StatusEffects,
@@ -124,9 +126,23 @@ function HitboxServer.Setup(managers, CombatRemotes)
 				IsCriticalHit         = skill.IsCritical or false,
 				AttackType            = skill.AttackType or "Default",
 				BlockBreakDamage      = skill.BlockBreakDamage,
-				AttackStartTime       = skill.AttackStartTime,
+				AttackStartTime       = auth.timestamp,
 				CounterWindowDuration = skill.CounterWindowDuration,
-			})
+			}
+
+			if isJumpOnly then
+				-- Ping compensation: wait ~150ms then check airborne state.
+				-- This catches players who jumped just before the server processed the hit.
+				local capturedTarget = target
+				task.spawn(function()
+					task.wait(0.15)
+					if healthManager:IsAlive(capturedTarget) and attacker.Parent then
+						combatManager:ApplyDamage(attacker, capturedTarget, dmgTable)
+					end
+				end)
+			else
+				combatManager:ApplyDamage(attacker, target, dmgTable)
+			end
 		end
 
 		task.delay(0.1, function()
