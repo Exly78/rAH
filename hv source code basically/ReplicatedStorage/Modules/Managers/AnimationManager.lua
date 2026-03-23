@@ -348,7 +348,6 @@ function AnimationManager:StopAll(fadeTime, keepBase)
 		end
 	end
 
-	print("[AnimationManager] Stopped all animations" .. (keepBase and " (kept base)" or ""))
 end
 
 function AnimationManager:StopAllIncludingBase(fadeTime)
@@ -363,7 +362,6 @@ function AnimationManager:StopAllIncludingBase(fadeTime)
 	end
 
 	self._baseTrack = nil
-	print("[AnimationManager] Stopped all animations including base")
 end
 
 function AnimationManager:OnKeyframe(keyframeName, callback)
@@ -413,7 +411,6 @@ function AnimationManager:PreloadAll()
 		end
 	end
 
-	print("[AnimationManager] Preloaded animations. Cached:", #self.LoadedTracks)
 end
 
 function AnimationManager:Destroy()
@@ -431,7 +428,6 @@ function AnimationManager:Destroy()
 	table.clear(self.CurrentTracks)
 	table.clear(self.LoadedTracks)
 	self._baseTrack = nil
-	print("[AnimationManager] Destroyed")
 end
 
 function AnimationManager:GetCurrentTrack()

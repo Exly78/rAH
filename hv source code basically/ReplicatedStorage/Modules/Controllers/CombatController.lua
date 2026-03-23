@@ -50,6 +50,12 @@ end
 function CombatController:EquipWeapon(weaponName)
 	weaponName = weaponName or "Katana"
 	if self._isEquipping or self.Character:GetAttribute("IsEquipped") then return end
+
+	local sm = self.CC.StateMachine
+	local inIdle   = sm:IsInState("Idle")
+	local inCrouch = sm:IsInState("Slide") and self.Character:GetAttribute("IsCrouching")
+	if not (inIdle or inCrouch) then return end
+
 	self._isEquipping = true
 
 	local wasSprinting        = self.CC.MovementController.IsSprinting
@@ -92,6 +98,12 @@ end
 
 function CombatController:UnequipWeapon()
 	if self._isEquipping or not self.Character:GetAttribute("IsEquipped") then return end
+
+	local sm = self.CC.StateMachine
+	local inIdle   = sm:IsInState("Idle")
+	local inCrouch = sm:IsInState("Slide") and self.Character:GetAttribute("IsCrouching")
+	if not (inIdle or inCrouch) then return end
+
 	self._isEquipping = true
 
 	local wasSprinting        = self.CC.MovementController.IsSprinting
@@ -124,6 +136,8 @@ function CombatController:UnequipWeapon()
 				self.WeaponManager:WeldToBody()
 				self.CC.AnimationManager:Stop(weaponName .. "_WeaponIdle")
 				self.CC.AnimationManager:StopAll(0.2, false)
+				self.CC.MovementController._sprintAnimPlaying = false
+				self.CC.MovementController._wasSprintingLastFrame = false
 				self.CurrentWeapon = nil
 				self._isEquipping = false
 				connection:Disconnect()
@@ -139,6 +153,8 @@ function CombatController:UnequipWeapon()
 			self.WeaponManager:WeldToBody()
 			self.CC.AnimationManager:Stop(weaponName .. "_WeaponIdle")
 			self.CC.AnimationManager:StopAll(0.2, false)
+			self.CC.MovementController._sprintAnimPlaying = false
+			self.CC.MovementController._wasSprintingLastFrame = false
 			self.CurrentWeapon = nil
 			self._isEquipping = false
 		end
