@@ -23,6 +23,7 @@ function DodgeState.new()
 	self.CameraInfluence = 0.6
 	self.WasSprinting = false
 	self.DodgeSucceeded = false
+	self._dodgeSuccessConn = nil
 	return setmetatable(self, DodgeState)
 end
 
@@ -71,6 +72,12 @@ function DodgeState:OnEnter(payload)
 	TagManager.AddTag(owner.Character, "Dodging", self.DodgeDuration)
 
 	CombatRemotes.DodgeStarted:FireServer(self.DodgeDuration)
+
+	local character = owner.Character
+	self._dodgeSuccessConn = CombatRemotes.DodgeSuccess.OnClientEvent:Connect(function(target)
+		if target ~= character then return end
+		self:OnDodgeSuccess()
+	end)
 
 	self.DodgeMotion = self:StartDodgeMotion(owner, self.DodgeDirection)
 end
@@ -288,6 +295,11 @@ end
 
 function DodgeState:OnExit()
 	local owner = self:GetOwner()
+
+	if self._dodgeSuccessConn then
+		self._dodgeSuccessConn:Disconnect()
+		self._dodgeSuccessConn = nil
+	end
 
 	if self.DodgeMotion then
 		self.DodgeMotion:Disconnect()

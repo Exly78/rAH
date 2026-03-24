@@ -230,32 +230,7 @@ function CombatController:PerformRunAttack()
 
 	CombatRemotes.SkillRequest:FireServer("RunAttack")
 
-	-- Initial lunge burst
-	local LUNGE_BOOST = 15
-	local curVel = rootPart.AssemblyLinearVelocity
-	rootPart.AssemblyLinearVelocity = Vector3.new(
-		runDir.X * (startSpeed + LUNGE_BOOST),
-		curVel.Y,
-		runDir.Z * (startSpeed + LUNGE_BOOST)
-	)
-
-	-- Decelerate from boosted speed to 0 over the attack duration
-	local boostedSpeed = startSpeed + LUNGE_BOOST
-	local elapsed = 0
-	local RunService = game:GetService("RunService")
-	local momentumConn
-	momentumConn = RunService.Heartbeat:Connect(function(dt)
-		elapsed = elapsed + dt
-		local t = math.min(elapsed / attackDuration, 1)
-		local speed = boostedSpeed * (1 - t)
-		local vel   = runDir * speed
-		local cv    = rootPart.AssemblyLinearVelocity
-		rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, cv.Y, vel.Z)
-		if t >= 1 then
-			momentumConn:Disconnect()
-			momentumConn = nil
-		end
-	end)
+	self.CC.MovementController:StartLockedLunge(runDir, startSpeed, attackDuration)
 
 	-- Hitbox
 	local hitFired = false
@@ -286,10 +261,6 @@ function CombatController:PerformRunAttack()
 	task.delay(attackDuration, function()
 		self.IsRunAttacking = false
 		self.CC.Humanoid.AutoRotate = true
-		if momentumConn then
-			momentumConn:Disconnect()
-			momentumConn = nil
-		end
 	end)
 end
 
@@ -438,28 +409,6 @@ function CombatController:SetupRemoteListeners()
 		end
 	end)
 	table.insert(self._remoteConnections, hitstunConn)
-
-	local dodgeConn = CombatRemotes.DodgeSuccess.OnClientEvent:Connect(function(target)
-		if target ~= self.Character then return end
-		if not self.CC.StateMachine:IsInState("Dodge") then return end
-
-		local dodgeState = self.CC.StateMachine.States["Dodge"]
-		if dodgeState and dodgeState.OnDodgeSuccess then
-			dodgeState:OnDodgeSuccess()
-		end
-	end)
-	table.insert(self._remoteConnections, dodgeConn)
-
-	local parryConn = CombatRemotes.ParrySuccess.OnClientEvent:Connect(function(target)
-		if target ~= self.Character then return end
-		if not self.CC.StateMachine:IsInState("Block") then return end
-
-		local blockState = self.CC.StateMachine.States["Block"]
-		if blockState and blockState.OnParrySuccess then
-			blockState:OnParrySuccess()
-		end
-	end)
-	table.insert(self._remoteConnections, parryConn)
 
 	local gotParriedConn = CombatRemotes.GotParried.OnClientEvent:Connect(function(target)
 		if target ~= self.Character then return end

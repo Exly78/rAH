@@ -44,6 +44,7 @@ function ServerCombatManager.new(healthManager, statusManager)
 	self.ComboTracking         = {}
 	self.InitializedCharacters = {}
 	self.LastPostureDamage     = {}
+	self.PostureData           = {}
 
 	print("[ServerCombatManager] Initialized")
 
@@ -54,9 +55,9 @@ function ServerCombatManager.new(healthManager, statusManager)
 			for character, _ in pairs(self.InitializedCharacters) do
 				local lastHit = self.LastPostureDamage[character] or 0
 				if now - lastHit >= 5 then
-					local currentPosture = character:GetAttribute("Posture") or 0
+					local currentPosture = self:GetPosture(character)
 					if currentPosture > 0 then
-						character:SetAttribute("Posture", math.max(0, currentPosture - 5))
+						self:SetPosture(character, math.max(0, currentPosture - 5))
 					end
 				end
 			end
@@ -70,6 +71,27 @@ function ServerCombatManager:SetStatusManager(statusManager)
 	self.StatusManager = statusManager
 end
 
+-- ===== POSTURE HELPERS (server-side only, never exposed as character attributes) =====
+function ServerCombatManager:GetPosture(character)
+	local data = self.PostureData[character]
+	return data and data.Posture or 0
+end
+
+function ServerCombatManager:GetMaxPosture(character)
+	local data = self.PostureData[character]
+	return data and data.MaxPosture or 100
+end
+
+function ServerCombatManager:SetPosture(character, value)
+	local data = self.PostureData[character]
+	if not data then return end
+	data.Posture = value
+	local player = Players:GetPlayerFromCharacter(character)
+	if player then
+		CombatRemotes.UpdatePosture:FireClient(player, value, data.MaxPosture)
+	end
+end
+
 -- ===== CHARACTER INITIALIZATION =====
 function ServerCombatManager:InitializeCharacter(character)
 	if self.InitializedCharacters[character] then return end
@@ -78,8 +100,7 @@ function ServerCombatManager:InitializeCharacter(character)
 	character:SetAttribute("CurrentWeapon",          nil)
 	character:SetAttribute("IsEquipped",             false)
 	character:SetAttribute("WeaponDamageMultiplier", 1.0)
-	character:SetAttribute("Posture",                0)
-	character:SetAttribute("MaxPosture",             100)
+	self.PostureData[character] = { Posture = 0, MaxPosture = 100 }
 
 	if self.HealthManager then
 		self.HealthManager:RegisterCharacter(character)
@@ -131,6 +152,7 @@ function ServerCombatManager:CleanupCharacter(character)
 
 	self.InitializedCharacters[character] = nil
 	self.LastPostureDamage[character]     = nil
+	self.PostureData[character]           = nil
 
 	print("[ServerCombatManager] Cleaned up character: " .. character.Name)
 end
@@ -434,8 +456,8 @@ function ServerCombatManager:ApplyBlockBreak(attacker, target, damageData)
 	TagManager.AddTag(target, "BlockBroken", 2.0)
 	TagManager.AddTag(target, "Hitstunned",  2.0)
 
-	local maxPosture = target:GetAttribute("MaxPosture") or 100
-	target:SetAttribute("Posture", maxPosture)
+	local maxPosture = self:GetMaxPosture(target)
+	self:SetPosture(target, maxPosture)
 	TagManager.AddTag(target, "PostureBroken", 2.0)
 	self.LastPostureDamage[target] = tick()
 
@@ -500,9 +522,9 @@ function ServerCombatManager:ApplyDamage(attacker, target, damageData)
 			print("[SERVER] " .. target.Name .. " is invulnerable (dodging)")
 			CombatRemotes.HitConfirm:FireAllClients(attacker.Name, target.Name, "Dodged", 0)
 
-			local currentPosture = target:GetAttribute("Posture") or 0
+			local currentPosture = self:GetPosture(target)
 			if currentPosture > 0 then
-				target:SetAttribute("Posture", math.max(0, currentPosture - 15))
+				self:SetPosture(target, math.max(0, currentPosture - 15))
 			end
 
 			local dodgerPlayer = Players:GetPlayerFromCharacter(target)
@@ -547,15 +569,15 @@ function ServerCombatManager:ApplyDamage(attacker, target, damageData)
 
 			TagManager.AddTag(attacker, "Hitstunned", 1.0)
 
-			local currentTargetPosture = target:GetAttribute("Posture") or 0
+			local currentTargetPosture = self:GetPosture(target)
 			if currentTargetPosture > 0 then
-				target:SetAttribute("Posture", math.max(0, currentTargetPosture - 25))
+				self:SetPosture(target, math.max(0, currentTargetPosture - 25))
 			end
 
-			local attackerPosture    = attacker:GetAttribute("Posture") or 0
-			local attackerMaxPosture = attacker:GetAttribute("MaxPosture") or 100
+			local attackerPosture    = self:GetPosture(attacker)
+			local attackerMaxPosture = self:GetMaxPosture(attacker)
 			local newAttackerPosture = math.min(attackerMaxPosture, attackerPosture + 25)
-			attacker:SetAttribute("Posture", newAttackerPosture)
+			self:SetPosture(attacker, newAttackerPosture)
 			self.LastPostureDamage[attacker] = tick()
 
 			if newAttackerPosture >= attackerMaxPosture then
@@ -596,10 +618,10 @@ function ServerCombatManager:ApplyDamage(attacker, target, damageData)
 			CombatRemotes.HitConfirm:FireAllClients(attacker.Name, target.Name, "Blocked", finalDamage)
 
 			if damageData.PostureDamage then
-				local currentPosture = target:GetAttribute("Posture") or 0
-				local maxPosture     = target:GetAttribute("MaxPosture") or 100
+				local currentPosture = self:GetPosture(target)
+				local maxPosture     = self:GetMaxPosture(target)
 				local newPosture     = math.min(maxPosture, currentPosture + damageData.PostureDamage)
-				target:SetAttribute("Posture", newPosture)
+				self:SetPosture(target, newPosture)
 				self.LastPostureDamage[target] = tick()
 
 				if newPosture >= maxPosture then
@@ -655,10 +677,10 @@ function ServerCombatManager:ApplyDamage(attacker, target, damageData)
 	end
 
 	if damageData.PostureDamage and shouldApplyPosture then
-		local currentPosture = target:GetAttribute("Posture") or 0
-		local maxPosture     = target:GetAttribute("MaxPosture") or 100
+		local currentPosture = self:GetPosture(target)
+		local maxPosture     = self:GetMaxPosture(target)
 		local newPosture     = math.min(maxPosture, currentPosture + damageData.PostureDamage)
-		target:SetAttribute("Posture", newPosture)
+		self:SetPosture(target, newPosture)
 		self.LastPostureDamage[target] = tick()
 
 		if newPosture >= maxPosture then
@@ -801,6 +823,7 @@ function ServerCombatManager:Destroy()
 	self.ComboTracking         = {}
 	self.InitializedCharacters = {}
 	self.LastPostureDamage     = {}
+	self.PostureData           = {}
 	print("[ServerCombatManager] Destroyed")
 end
 

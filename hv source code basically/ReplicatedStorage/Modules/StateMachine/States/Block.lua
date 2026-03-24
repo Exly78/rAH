@@ -22,6 +22,7 @@ function BlockState.new()
 	self.ParryStartupFinished = false
 	self.AnimationConnection = nil
 	self.ParrySucceeded = false
+	self._parrySuccessConn = nil
 	return setmetatable(self, BlockState)
 end
 
@@ -47,6 +48,12 @@ function BlockState:OnEnter(payload)
 
 	-- Notify server to set server-side parry tags
 	CombatRemotes.BlockStarted:FireServer(PARRY_WINDOW)
+
+	local character = owner.Character
+	self._parrySuccessConn = CombatRemotes.ParrySuccess.OnClientEvent:Connect(function(target)
+		if target ~= character then return end
+		self:OnParrySuccess()
+	end)
 
 	-- Slow movement during parry
 	owner.Humanoid.WalkSpeed = owner.Humanoid.WalkSpeed * PARRY_SLOWDOWN
@@ -160,6 +167,11 @@ end
 function BlockState:OnExit()
 	local owner = self:GetOwner()
 
+	if self._parrySuccessConn then
+		self._parrySuccessConn:Disconnect()
+		self._parrySuccessConn = nil
+	end
+
 	if self.AnimationConnection then
 		self.AnimationConnection:Disconnect()
 		self.AnimationConnection = nil
@@ -193,7 +205,7 @@ function BlockState:OnExit()
 end
 
 function BlockState:GetBlockAnimationName(owner, animType)
-	local weapon = owner.CombatController.CurrentWeapon
+	local weapon = owner:GetCurrentWeapon()
 	if weapon and owner.Character:GetAttribute("IsEquipped") then
 		return weapon .. "_" .. animType
 	else

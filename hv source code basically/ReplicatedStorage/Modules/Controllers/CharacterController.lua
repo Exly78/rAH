@@ -130,14 +130,15 @@ end
 
 
 function CharacterController:PlayAnimation(animName)
-	local weapon = self.CombatController.CurrentWeapon
+	local weapon = self:GetCurrentWeapon()
 	local fullKey = weapon and (weapon .. "_" .. animName) or animName
 	self.AnimationManager:Play(fullKey)
 end
 
 function CharacterController:PlayIdle()
-	if self.Character:GetAttribute("IsEquipped") and self.CombatController.CurrentWeapon then
-		local idleKey = self.CombatController.CurrentWeapon .. "_WeaponIdle"
+	local weapon = self:GetCurrentWeapon()
+	if self.Character:GetAttribute("IsEquipped") and weapon then
+		local idleKey = weapon .. "_WeaponIdle"
 		-- Don't restart if already playing
 		if self.AnimationManager:IsKeyPlaying(idleKey) then return end
 		self.AnimationManager:Play(idleKey, 0.2, false)
@@ -155,6 +156,14 @@ end
 
 function CharacterController:IsMovementLocked()
 	return self.MovementController:IsMovementLocked()
+end
+
+function CharacterController:GetCurrentWeapon()
+	return self.CombatController.CurrentWeapon
+end
+
+function CharacterController:IsRunAttacking()
+	return self.CombatController.IsRunAttacking
 end
 
 -- [[ 5. CLEANUP ]]

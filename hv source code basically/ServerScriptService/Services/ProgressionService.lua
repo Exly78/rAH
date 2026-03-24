@@ -15,6 +15,8 @@ ProgressionService.__index = ProgressionService
 function ProgressionService.new(playerDataService)
 	local self = setmetatable({}, ProgressionService)
 	self.PlayerDataService = playerDataService
+	self.ExtraStatBonuses  = {}  -- [userId] = { BonusDamage = n, ... } from class/perk effects
+	self.DerivedStats      = {}  -- [userId] = full derived table, server-side only
 	self:_setupRemotes()
 	print("[ProgressionService] Ready")
 	return self
@@ -26,6 +28,8 @@ end
 function ProgressionService:_notifyClient(player)
 	local snapshot = self.PlayerDataService:GetClientSnapshot(player)
 	if snapshot then
+		-- Include derived stats so client UI can display them without character attributes
+		snapshot.DerivedStats = self.DerivedStats[player.UserId]
 		ProgressionRemotes.PlayerDataUpdated:FireClient(player, snapshot)
 	end
 end
@@ -52,28 +56,30 @@ function ProgressionService:_checkPerkMilestone(player, data)
 	end
 end
 
--- Applies the passive bonuses from a class definition to character attributes
+-- Applies the passive bonuses from a class definition to the server-side stat table
 function ProgressionService:_applyClassBonuses(player, classDef)
-	local character = player.Character
-	if not character then return end
 	local bonus = classDef.PassiveBonus or {}
-	for attr, value in pairs(bonus) do
-		local current = character:GetAttribute(attr) or 0
-		character:SetAttribute(attr, current + value)
+	if not next(bonus) then return end
+
+	local userId = player.UserId
+	if not self.ExtraStatBonuses[userId] then
+		self.ExtraStatBonuses[userId] = {}
 	end
+	for attr, value in pairs(bonus) do
+		self.ExtraStatBonuses[userId][attr] = (self.ExtraStatBonuses[userId][attr] or 0) + value
+	end
+
+	self:RecalculateDerivedStats(player)
 end
 
--- Applies perk effects to character attributes
+-- Applies perk effects to the server-side stat table
 function ProgressionService:_applyPerkEffect(player, perkName)
-	local character = player.Character
-	if not character then return end
 	local perk = PerkData:GetPerk(perkName)
 	if not perk then return end
 
 	local effect = perk.Effect or {}
 
-	-- Stat bonuses are additive to the stat table, not attributes directly
-	-- (will be re-derived on next stat recalc)
+	-- Stat bonuses are additive to the stat table (re-derived on next recalc)
 	if effect.StatBonus then
 		local data = self.PlayerDataService:GetData(player)
 		if data then
@@ -83,32 +89,35 @@ function ProgressionService:_applyPerkEffect(player, perkName)
 		end
 	end
 
-	-- Derived bonuses go to character attributes
+	-- Direct derived bonuses go to ExtraStatBonuses (never to character attributes)
+	local userId = player.UserId
+	if not self.ExtraStatBonuses[userId] then
+		self.ExtraStatBonuses[userId] = {}
+	end
 	for key, value in pairs(effect) do
 		if key ~= "StatBonus" then
-			local current = character:GetAttribute(key) or 0
-			character:SetAttribute(key, current + value)
+			self.ExtraStatBonuses[userId][key] = (self.ExtraStatBonuses[userId][key] or 0) + value
 		end
 	end
+
+	self:RecalculateDerivedStats(player)
 end
 
--- Recalculates and applies all derived stats for a player from scratch
+-- Recalculates all derived stats for a player and stores them server-side only
 function ProgressionService:RecalculateDerivedStats(player)
-	local character = player.Character
-	if not character then return end
 	local data = self.PlayerDataService:GetData(player)
 	if not data then return end
 
 	local derived = StatData:CalculateDerived(data.Stats)
 
-	character:SetAttribute("BonusDamage",      derived.BonusDamage)
-	character:SetAttribute("MaxHealthBonus",   derived.MaxHealthBonus)
-	character:SetAttribute("PostureBonus",     derived.PostureBonus)
-	character:SetAttribute("DamageResistance", derived.DamageResistance)
-	character:SetAttribute("DodgeSpeedBonus",  derived.DodgeSpeedBonus)
-	character:SetAttribute("CritChance",       derived.CritChance)
-	character:SetAttribute("VeilDamageBonus",  derived.VeilDamageBonus)
-	character:SetAttribute("SanityResistance", derived.SanityResistance)
+	-- Factor in any extra bonuses from class passives and perk direct effects
+	local extra = self.ExtraStatBonuses[player.UserId] or {}
+	for k, v in pairs(extra) do
+		derived[k] = (derived[k] or 0) + v
+	end
+
+	-- Store server-side only — never written to character attributes
+	self.DerivedStats[player.UserId] = derived
 end
 
 -- ===== SPEND STAT POINT =====
