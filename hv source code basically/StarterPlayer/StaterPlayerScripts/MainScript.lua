@@ -4,37 +4,64 @@ local RunService = game:GetService("RunService")
 local Players    = game:GetService("Players")
 local UIS        = game:GetService("UserInputService")
 
-local player    = Players.LocalPlayer
+local player = Players.LocalPlayer
 if not player then return end
-
-local character = player.Character or player.CharacterAdded:Wait()
 
 local Modules             = game.ReplicatedStorage:WaitForChild("Modules")
 local CharacterController = require(Modules.Controllers:WaitForChild("CharacterController"))
 
-local controller = CharacterController.new(character, {})
-
-local humanoid = controller.Humanoid
-humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-
-print("=== COMBAT SYSTEM READY ===")
-
 -- ===== CLIENT-SIDE DEBOUNCES =====
-local DODGE_CD  = 0.65  -- slightly longer than DodgeDuration (0.45s)
-local BLOCK_CD  = 0.50  -- prevents rapid parry window farming
-local JUMP_CD   = 0.30  -- prevents jump spam
+local DODGE_CD = 0.65
+local BLOCK_CD = 0.50
+local JUMP_CD  = 0.30
+
+-- Upvalues — reassigned on every respawn so all closures below see the new values
+local controller
+local humanoid
+local character
 local dodgeTime = 0
 local blockTime = 0
 local jumpTime  = 0
 
-controller.WantsDodge    = false
-controller.WantsBlock    = false
-controller.IsHoldingBlock = false
+local function initCharacter(newCharacter)
+	if controller then
+		controller:Destroy()
+	end
+
+	character   = newCharacter
+	controller  = CharacterController.new(character, {})
+	humanoid    = controller.Humanoid
+
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+
+	controller.WantsDodge     = false
+	controller.WantsBlock     = false
+	controller.IsHoldingBlock = false
+	controller.WantsSlide     = false
+	controller.IsHoldingCrouch = false
+
+	-- Reset debounces so they don't carry over from before death
+	dodgeTime = 0
+	blockTime = 0
+	jumpTime  = 0
+
+	print("=== COMBAT SYSTEM READY ===")
+end
+
+-- Connect BEFORE fetching character to avoid missing the event on fast respawns
+player.CharacterAdded:Connect(function(newCharacter)
+	-- Wait for humanoid so CharacterController can find it immediately
+	newCharacter:WaitForChild("Humanoid", 10)
+	initCharacter(newCharacter)
+end)
+
+initCharacter(player.Character or player.CharacterAdded:Wait())
 
 -- ===== INPUT HANDLING =====
 UIS.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
+	if not controller then return end
 
 	local now   = tick()
 	local state = humanoid:GetState()
@@ -68,12 +95,12 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 			end
 		elseif now >= blockTime then
 			blockTime = now + BLOCK_CD
-			controller.WantsBlock    = true
+			controller.WantsBlock     = true
 			controller.IsHoldingBlock = true
 		end
 	end
 
-	-- Equip / Unequip (E) — debounce handled inside CombatController._isEquipping
+	-- Equip / Unequip (E)
 	if input.KeyCode == Enum.KeyCode.E then
 		if character:GetAttribute("IsEquipped") then
 			controller.CombatController:UnequipWeapon()
@@ -109,7 +136,7 @@ UIS.InputBegan:Connect(function(input, gameProcessed)
 				slideState:SetHolding(true)
 			end
 		else
-			controller.WantsSlide = true
+			controller.WantsSlide      = true
 			controller.IsHoldingCrouch = true
 		end
 	end
@@ -117,10 +144,12 @@ end)
 
 UIS.InputEnded:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
+	if not controller then return end
 
 	if input.KeyCode == Enum.KeyCode.Q then
 		controller.WantsDodge = false
 	end
+
 	if input.KeyCode == Enum.KeyCode.LeftControl then
 		controller.IsHoldingCrouch = false
 		if controller.StateMachine:IsInState("Slide") then
@@ -148,6 +177,7 @@ end)
 
 -- ===== MAIN LOOP =====
 RunService.Heartbeat:Connect(function(dt)
+	if not controller then return end
 	local success, err = pcall(function()
 		controller:Update(dt)
 	end)

@@ -16,7 +16,9 @@ function IdleState:OnEnter()
 
 	if owner.Character:GetAttribute("IsEquipped") and combat.CurrentWeapon then
 		local idleAnim = combat.CurrentWeapon .. "_WeaponIdle"
-		owner.AnimationManager:Play(idleAnim, 0.2)
+		if not owner.AnimationManager:IsKeyPlaying(idleAnim) then
+			owner.AnimationManager:Play(idleAnim, 0.2)
+		end
 	end
 end
 

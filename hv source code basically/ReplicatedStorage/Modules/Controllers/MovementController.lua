@@ -1,6 +1,8 @@
 local MovementController = {}
 MovementController.__index = MovementController
 
+local RunService = game:GetService("RunService")
+
 local WALK_SPEEDS = {
 	EQUIPPED_NORMAL = 14,
 	EQUIPPED_SPRINT = 26,
@@ -35,7 +37,29 @@ function MovementController:Update(dt, moveVector, sprintToggled)
 	self.IsMoving = moveVector.Magnitude > 0
 	local moveDir = self.IsMoving and moveVector.Unit or Vector3.zero
 
-	local inDodge = self.CC.StateMachine:IsInState("Dodge")
+	local inDodge      = self.CC.StateMachine:IsInState("Dodge")
+	local inRunAttack  = self.CC:IsRunAttacking()
+	local inBlock      = self.CC.StateMachine:IsInState("Block")
+
+	-- Run attack drives its own velocity — suppress all normal movement input
+	if inRunAttack then
+		self.Humanoid:Move(Vector3.zero, false)
+		if self.IsSprinting or self._sprintAnimPlaying then
+			self.IsSprinting = false
+			self._wasSprintingLastFrame = false
+			self:ForceStopSprintAnimation()
+		end
+		return
+	end
+
+	-- Block state: allow movement but strip sprint so it can't start or continue
+	if inBlock and (self.IsSprinting or self._sprintAnimPlaying or sprintToggled) then
+		self.IsSprinting = false
+		self.CC.InputController:ResetSprint()
+		self._wasSprintingLastFrame = false
+		self:ForceStopSprintAnimation()
+		sprintToggled = false
+	end
 
 	-- Movement locked (except dodge)
 	if self:IsMovementLocked() and not inDodge then
@@ -106,7 +130,7 @@ function MovementController:UpdateSprintAnimation()
 	end
 
 	-- Detect weapon/equip change to force restart animation
-	local weapon = self.CC.CombatController.CurrentWeapon
+	local weapon = self.CC:GetCurrentWeapon()
 	local isEquipped = self.Character:GetAttribute("IsEquipped")
 	local currentSprintKey = (weapon and isEquipped) and (weapon .. "_Sprint") or "Sprint"
 
@@ -132,7 +156,7 @@ end
 function MovementController:StartSprintAnimation()
 	if self._sprintAnimPlaying then return end
 
-	local weapon = self.CC.CombatController.CurrentWeapon
+	local weapon = self.CC:GetCurrentWeapon()
 	local isEquipped = self.Character:GetAttribute("IsEquipped")
 	local sprintKey = (weapon and isEquipped) and (weapon .. "_Sprint") or "Sprint"
 
@@ -149,7 +173,7 @@ end
 function MovementController:StopSprintAnimation()
 	if not self._sprintAnimPlaying then return end
 
-	local weapon = self.CC.CombatController.CurrentWeapon
+	local weapon = self.CC:GetCurrentWeapon()
 	local sprintKey =
 		(weapon and self.Character:GetAttribute("IsEquipped"))
 		and (weapon .. "_Sprint")
@@ -162,14 +186,41 @@ end
 function MovementController:ForceStopSprintAnimation()
 	if not self._sprintAnimPlaying then return end
 
-	local weapon = self.CC.CombatController.CurrentWeapon
+	local weapon = self.CC:GetCurrentWeapon()
 	local sprintKey =
 		(weapon and self.Character:GetAttribute("IsEquipped"))
 		and (weapon .. "_Sprint")
 		or "Sprint"
 
-	self.CC.AnimationManager:Stop(sprintKey, 0)
+	self.CC.AnimationManager:Stop(sprintKey, 0.06)
 	self._sprintAnimPlaying = false
+end
+
+function MovementController:StartLockedLunge(dir, startSpeed, duration)
+	local LUNGE_BOOST = 15
+	local rootPart = self.CC.RootPart
+	local boostedSpeed = startSpeed + LUNGE_BOOST
+
+	local curVel = rootPart.AssemblyLinearVelocity
+	rootPart.AssemblyLinearVelocity = Vector3.new(
+		dir.X * boostedSpeed,
+		curVel.Y,
+		dir.Z * boostedSpeed
+	)
+
+	local elapsed = 0
+	local conn
+	conn = RunService.Heartbeat:Connect(function(dt)
+		elapsed = elapsed + dt
+		local t = math.min(elapsed / duration, 1)
+		local speed = boostedSpeed * (1 - t)
+		local vel = dir * speed
+		local cv = rootPart.AssemblyLinearVelocity
+		rootPart.AssemblyLinearVelocity = Vector3.new(vel.X, cv.Y, vel.Z)
+		if t >= 1 then
+			conn:Disconnect()
+		end
+	end)
 end
 
 function MovementController:TryResumeSprint()

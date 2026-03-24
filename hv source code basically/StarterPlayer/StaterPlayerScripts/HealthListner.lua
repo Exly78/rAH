@@ -102,38 +102,38 @@ local function SetupPostureBar(character)
 	ActivePostureBars[character] = {
 		Gui = gui,
 		Slider = slider,
-		HideTime = 0
+		HideTime = 0,
+		CurrentPosture = 0,
+		MaxPosture = 100,
 	}
-
-	character:GetAttributeChangedSignal("Posture"):Connect(function()
-		local data = ActivePostureBars[character]
-		if not data then return end
-
-		local currentPosture = character:GetAttribute("Posture") or 0
-		local maxPosture = character:GetAttribute("MaxPosture") or 100
-
-		if currentPosture > 0 then
-			data.Gui.Enabled = true
-			data.HideTime = tick() + 5
-		end
-
-		if data.Slider then
-			-- Ensure the AnchorPoint is set so it scales upwards
-			data.Slider.AnchorPoint = Vector2.new(0, 1)
-
-			local percent = math.clamp(currentPosture / maxPosture, 0, 1)
-			-- Tweens the Y scale from 0 to 0.97
-			local targetSize = UDim2.new(0.8, 0, 0.97 * percent, 0)
-			-- Set the position to the bottom of the container
-			local targetPosition = UDim2.new(0.18, 0, 1, 0)
-
-			TweenService:Create(data.Slider, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-				Size = targetSize,
-				Position = targetPosition
-			}):Play()
-		end
-	end)
 end
+
+-- Posture updates come from the server via remote (owning player only, never a character attribute)
+CombatRemotes.UpdatePosture.OnClientEvent:Connect(function(posture, maxPosture)
+	local character = Player.Character
+	if not character then return end
+	local data = ActivePostureBars[character]
+	if not data then return end
+
+	data.CurrentPosture = posture
+	data.MaxPosture = maxPosture
+
+	if posture > 0 then
+		data.Gui.Enabled = true
+		data.HideTime = tick() + 5
+	end
+
+	if data.Slider then
+		data.Slider.AnchorPoint = Vector2.new(0, 1)
+		local percent = math.clamp(posture / maxPosture, 0, 1)
+		local targetSize = UDim2.new(0.8, 0, 0.97 * percent, 0)
+		local targetPosition = UDim2.new(0.18, 0, 1, 0)
+		TweenService:Create(data.Slider, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = targetSize,
+			Position = targetPosition
+		}):Play()
+	end
+end)
 
 -- Call SetupPostureBar strictly for the Local Player
 Player.CharacterAdded:Connect(function(character)
@@ -153,7 +153,7 @@ RunService.Heartbeat:Connect(function()
 			continue
 		end
 
-		local currentPosture = character:GetAttribute("Posture") or 0
+		local currentPosture = data.CurrentPosture or 0
 		if currentPosture == 0 and now > data.HideTime then
 			data.Gui.Enabled = false
 		end

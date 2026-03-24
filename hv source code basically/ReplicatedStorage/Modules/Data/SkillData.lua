@@ -145,6 +145,23 @@ SkillData.Skills = {
 		AttackType       = "Default",
 	},
 
+	["RunAttack"] = {
+		Name            = "Run Attack",
+		Damage          = 18,
+		PostureDamage   = 12,
+		Cost            = 0,
+		Cooldown        = 0.8,
+		HitstunDuration = 0.45,
+		HitboxSize      = Vector3.new(6, 5, 9),
+		HitboxOffset    = 6,
+		Animation       = "RunAttack",
+		Duration        = 0.7,
+		StatusEffects   = {},
+		Priority        = 2,
+		Continuous      = false,
+		AttackType      = "Default",
+	},
+
 	["SlideAttack"] = {
 		Name            = "Slide Attack",
 		Damage          = 20,

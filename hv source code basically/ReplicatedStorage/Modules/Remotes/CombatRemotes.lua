@@ -50,6 +50,7 @@ CombatRemotes.DodgeSuccess = GetOrCreateRemote("DodgeSuccess", "RemoteEvent")
 CombatRemotes.ParrySuccess = GetOrCreateRemote("ParrySuccess", "RemoteEvent")
 CombatRemotes.BlockImpact  = GetOrCreateRemote("BlockImpact", "RemoteEvent")
 CombatRemotes.GotParried   = GetOrCreateRemote("GotParried", "RemoteEvent")
+CombatRemotes.UpdatePosture = GetOrCreateRemote("UpdatePosture", "RemoteEvent")
 CombatRemotes.BlockBroken  = GetOrCreateRemote("BlockBroken", "RemoteEvent")  -- fired when BlockBreak attack shatters a parry/block
 
 

@@ -28,6 +28,8 @@ function CombatController.new(characterController)
 	self.CanQueueNextAttack  = false
 	self._isEquipping        = false
 	self._slideAttackTime    = 0
+	self._runAttackTime      = 0
+	self.IsRunAttacking      = false
 
 	self.Character:SetAttribute("IsEquipped", false)
 	self.Character:SetAttribute("WeaponDamageMultiplier", DAMAGE_MULTIPLIERS.UNARMED)
@@ -71,7 +73,7 @@ function CombatController:EquipWeapon(weaponName)
 	self.Character:SetAttribute("WeaponDamageMultiplier", DAMAGE_MULTIPLIERS.KATANA)
 	CombatRemotes.WeaponEquipped:FireServer(weaponName)
 
-	self.CC.AnimationManager:Play(weaponName .. "_WeaponIdle", 0)
+	self.CC.AnimationManager:Play(weaponName .. "_WeaponIdle", 0.15)
 	local equipTracks = self.CC.AnimationManager:Play(weaponName .. "_Equip")
 
 	if wasSprinting and self.CC.MovementController.IsMoving then
@@ -168,6 +170,7 @@ function CombatController:PerformBasicAttack()
 
 	local stateMachine = self.CC.StateMachine
 	if stateMachine:IsInState("Hitstun") or stateMachine:IsInState("KnockedOut") then return end
+	if self.IsRunAttacking then return end
 
 	if stateMachine:IsInState("Attack") then
 		if self.CanQueueNextAttack and not self.QueuedAttack then
@@ -178,10 +181,16 @@ function CombatController:PerformBasicAttack()
 
 	if not stateMachine:IsInState("Idle") then return end
 
+	-- Run attack when sprinting
+	if self.CC.MovementController.IsSprinting then
+		self:PerformRunAttack()
+		return
+	end
+
 	self:AdvanceCombo()
 	local attackAnim  = "Attack" .. self.ComboCount
 	local weapon      = self.CurrentWeapon
-	local attackTracks = self.CC.AnimationManager:Play(weapon .. "_" .. attackAnim, 0, true)
+	local attackTracks = self.CC.AnimationManager:Play(weapon .. "_" .. attackAnim, 0.1, true)
 	local attackTrack  = attackTracks and attackTracks[1] or nil
 
 	stateMachine:SetState("Attack", {
@@ -192,6 +201,67 @@ function CombatController:PerformBasicAttack()
 	})
 
 	CombatRemotes.SkillRequest:FireServer("BasicAttack", self.ComboCount)
+end
+
+-- ===== RUN ATTACK =====
+function CombatController:PerformRunAttack()
+	if tick() < self._runAttackTime then return end
+	self._runAttackTime = tick() + 1.0
+
+	local rootPart = self.CC.RootPart
+	local weapon   = self.CurrentWeapon
+
+	-- Lock onto the direction the character is currently facing
+	local look   = rootPart.CFrame.LookVector
+	local runDir = Vector3.new(look.X, 0, look.Z).Unit
+	local startSpeed = self.CC.MovementController.Humanoid.WalkSpeed
+
+	-- Stop sprint so MovementController doesn't fight the locked direction
+	self.CC.MovementController:ForceStopSprintAnimation()
+	self.CC.MovementController.IsSprinting = false
+	self.CC.InputController:ResetSprint()
+
+	self.IsRunAttacking = true
+	self.CC.Humanoid.AutoRotate = false
+
+	local tracks = self.CC.AnimationManager:Play(weapon .. "_RunAttack", 0.05, true)
+	local track  = tracks and tracks[1] or nil
+	local attackDuration = (track and track.Length) or 0.7
+
+	CombatRemotes.SkillRequest:FireServer("RunAttack")
+
+	self.CC.MovementController:StartLockedLunge(runDir, startSpeed, attackDuration)
+
+	-- Hitbox
+	local hitFired = false
+	if track then
+		local conn
+		conn = track:GetMarkerReachedSignal("Hit"):Connect(function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("RunAttack", 1)
+				conn:Disconnect()
+			end
+		end)
+		task.delay(attackDuration * 0.9, function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("RunAttack", 1)
+			end
+		end)
+	else
+		task.delay(0.3, function()
+			if not hitFired then
+				hitFired = true
+				CombatRemotes.CreateHitbox:FireServer("RunAttack", 1)
+			end
+		end)
+	end
+
+	task.delay(attackDuration, function()
+		self.IsRunAttacking = false
+		self.CC.Humanoid.AutoRotate = true
+	end)
 end
 
 -- ===== SLIDE ATTACK =====
@@ -209,11 +279,16 @@ function CombatController:PerformSlideAttack()
 	if tick() < self._slideAttackTime then return end
 	self._slideAttackTime = tick() + 1.0
 
+	-- Lock slide so it doesn't end mid-attack
+	slideState:SetAttacking(true)
+
 	local weapon = self.CurrentWeapon
 	local tracks = self.CC.AnimationManager:Play(weapon .. "_SlideAttack", 0.05, true)
 	local track  = tracks and tracks[1] or nil
 
 	CombatRemotes.SkillRequest:FireServer("SlideAttack")
+
+	local attackDuration = (track and track.Length) or 0.8
 
 	local hitFired = false
 	if track then
@@ -225,7 +300,7 @@ function CombatController:PerformSlideAttack()
 				conn:Disconnect()
 			end
 		end)
-		task.delay(track.Length * 0.9, function()
+		task.delay(attackDuration * 0.9, function()
 			if not hitFired then
 				hitFired = true
 				CombatRemotes.CreateHitbox:FireServer("SlideAttack", 1)
@@ -239,6 +314,11 @@ function CombatController:PerformSlideAttack()
 			end
 		end)
 	end
+
+	-- Release the slide lock when the animation finishes
+	task.delay(attackDuration, function()
+		slideState:SetAttacking(false)
+	end)
 end
 
 -- ===== CRITICAL ATTACK =====
@@ -310,6 +390,10 @@ function CombatController:ApplyHitstun(duration)
 	if self.CC:IsInvulnerable() then return end
 
 	TagManager.AddTag(self.Character, "Hitstunned", duration)
+
+	-- If blocking, stay in Block state — BlockImpact handles the reaction visually
+	if self.CC.StateMachine:IsInState("Block") then return end
+
 	self.CC:PlayAnimation("Hitstun")
 
 	if not self.CC.StateMachine:IsInState("Hitstun") then
@@ -325,28 +409,6 @@ function CombatController:SetupRemoteListeners()
 		end
 	end)
 	table.insert(self._remoteConnections, hitstunConn)
-
-	local dodgeConn = CombatRemotes.DodgeSuccess.OnClientEvent:Connect(function(target)
-		if target ~= self.Character then return end
-		if not self.CC.StateMachine:IsInState("Dodge") then return end
-
-		local dodgeState = self.CC.StateMachine.States["Dodge"]
-		if dodgeState and dodgeState.OnDodgeSuccess then
-			dodgeState:OnDodgeSuccess()
-		end
-	end)
-	table.insert(self._remoteConnections, dodgeConn)
-
-	local parryConn = CombatRemotes.ParrySuccess.OnClientEvent:Connect(function(target)
-		if target ~= self.Character then return end
-		if not self.CC.StateMachine:IsInState("Block") then return end
-
-		local blockState = self.CC.StateMachine.States["Block"]
-		if blockState and blockState.OnParrySuccess then
-			blockState:OnParrySuccess()
-		end
-	end)
-	table.insert(self._remoteConnections, parryConn)
 
 	local gotParriedConn = CombatRemotes.GotParried.OnClientEvent:Connect(function(target)
 		if target ~= self.Character then return end

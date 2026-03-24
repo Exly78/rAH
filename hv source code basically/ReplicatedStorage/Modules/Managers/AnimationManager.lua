@@ -23,7 +23,8 @@ local WEAPON_ANIMATION_PATHS = {
 	Walk = {"Walk"},
 	Critical    = {"Attacking/critical"},
 	CriticalAlt = {"Attacking/criticalalt"},
-	SlideAttack = {"Attacking/SlideAttack"},
+	SlideAttack = {"Attacking/slideattack"},
+	RunAttack   = {"Attacking/runningattack"},
 
 }
 
@@ -133,7 +134,7 @@ function AnimationManager:_playTracks(animObjects, fadeTime, isBase, isAttack)
 			if track and track ~= self._baseTrack then
 				local baseName = track.Animation and track.Animation.Name or ""
 				if baseName:match("swing") or baseName:match("Attack") or baseName:match("Dash") then
-					track:Stop(0)
+					track:Stop(0.08)
 					table.remove(self.CurrentTracks, i)
 				end
 			end
